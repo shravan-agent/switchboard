@@ -30,7 +30,12 @@ export const liveOwnerSessionSchema = z.object({
 });
 export type LiveOwnerSession = z.infer<typeof liveOwnerSessionSchema>;
 
+export type SessionRowPresence =
+	| { readonly kind: 'present'; readonly id: string }
+	| { readonly kind: 'absent' };
+
 export interface PersonSessionRecords {
+	readonly sessionRowByToken: (token: string) => Promise<SignInStoreResult<SessionRowPresence>>;
 	readonly isPersonOrganizationSessionActive: (
 		personId: string,
 		sessionId: string,

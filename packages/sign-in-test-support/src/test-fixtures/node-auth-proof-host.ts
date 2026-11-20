@@ -179,8 +179,12 @@ export async function startNodeAuthProofHost(props: {
 				if (projection === 'membership-facts') organizationReads.lookup += 1;
 				if (projection === 'people-members') organizationReads.list += 1;
 				if (fault !== null && matchesDatabaseFault(call, fault)) {
-					if (fault.once === true) fault = null;
-					throw new Error('Injected Node sign-in driver failure');
+					if (fault.skipMatches !== undefined && fault.skipMatches > 0) {
+						fault.skipMatches -= 1;
+					} else {
+						if (fault.once === true) fault = null;
+						throw new Error('Injected Node sign-in driver failure');
+					}
 				}
 				if (
 					observed !== null &&

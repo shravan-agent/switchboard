@@ -41,6 +41,7 @@ import {
 	signInIslandStateSchema,
 	type SignInIslandState,
 } from '#sign-in-core/pages/islands/sign-in-island-state';
+import { SignedInNavigation } from '#sign-in-core/pages/islands/signed-in-navigation';
 
 const authClient = createAuthClient({
 	plugins: [twoFactorClient(), passkeyClient()],
@@ -95,6 +96,26 @@ function NavigationLink(props: {
 	);
 }
 
+function PagePasskeyManager(): React.ReactElement {
+	return (
+		<PasskeyManager
+			removePasskey={removePasskey}
+			labels={{
+				empty: 'No passkeys yet.',
+				add: 'Add passkey',
+				rename: 'Rename',
+				save: 'Save',
+				cancel: 'Cancel',
+				remove: 'Remove',
+				name: 'Passkey name',
+				unnamed: 'Passkey',
+				failed:
+					"That passkey change didn't complete. If it was cancelled, try again; if it needs a recent confirmation, confirm with your app first.",
+			}}
+		/>
+	);
+}
+
 function SignInPageContent({ state }: { readonly state: SignInIslandState }): React.ReactElement {
 	switch (state.kind) {
 		case 'passkey-sign-in':
@@ -146,23 +167,24 @@ function SignInPageContent({ state }: { readonly state: SignInIslandState }): Re
 				/>
 			);
 		case 'passkey-management':
+			return <PagePasskeyManager />;
+		case 'signed-in-navigation': {
+			const active = state.navigation.activeOrganization;
 			return (
-				<PasskeyManager
-					removePasskey={removePasskey}
-					labels={{
-						empty: 'No passkeys yet.',
-						add: 'Add passkey',
-						rename: 'Rename',
-						save: 'Save',
-						cancel: 'Cancel',
-						remove: 'Remove',
-						name: 'Passkey name',
-						unnamed: 'Passkey',
-						failed:
-							"That passkey change didn't complete. If it was cancelled, try again; if it needs a recent confirmation, confirm with your app first.",
-					}}
+				<SignedInNavigation
+					navigation={state.navigation}
+					passkeys={<PagePasskeyManager />}
+					people={
+						<OrganizationPeople
+							key={active.organizationId}
+							organizationId={active.organizationId}
+							organizationName={active.organizationName}
+							transport={organizationPeopleTransport}
+						/>
+					}
 				/>
 			);
+		}
 		case 'recovery-codes':
 			return (
 				<Card>

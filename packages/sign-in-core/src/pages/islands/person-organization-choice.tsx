@@ -8,7 +8,7 @@ import {
 interface OrganizationChoiceBrowser {
 	readonly setActive: (organizationId: string) => Promise<{ readonly ok: boolean }>;
 	readonly replace: () => void;
-	readonly showRefusal: () => void;
+	readonly showRefusal?: () => void;
 }
 
 /** A switch's response cannot establish the stored choice. Every ending reads it back. */
@@ -18,12 +18,20 @@ export async function switchPersonOrganization(
 ): Promise<void> {
 	try {
 		const response = await browser.setActive(organizationId);
-		if (!response.ok) browser.showRefusal();
+		if (!response.ok) browser.showRefusal?.();
 	} catch {
 		// A lost response may follow a committed switch. The page render decides.
 	} finally {
 		browser.replace();
 	}
+}
+
+export function setActivePersonOrganization(organizationId: string): Promise<Response> {
+	return fetch('/api/auth/organization/set-active', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ organizationId }),
+	});
 }
 
 export function PersonOrganizationChoice(
@@ -39,12 +47,7 @@ export function PersonOrganizationChoice(
 		pendingReference.current = true;
 		setPending(true);
 		void switchPersonOrganization(submitter.value, {
-			setActive: (organizationId: string): Promise<Response> =>
-				fetch('/api/auth/organization/set-active', {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({ organizationId }),
-				}),
+			setActive: setActivePersonOrganization,
 			replace: (): void => location.replace(location.href),
 			showRefusal: (): void => {
 				const status = document.getElementById('status');

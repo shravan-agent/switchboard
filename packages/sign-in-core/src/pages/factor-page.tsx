@@ -1,4 +1,5 @@
 /** @jsxImportSource react */
+import { PasskeyManagementCard } from '@agent-collaboration/auth-ui';
 import {
 	Alert,
 	AlertDescription,
@@ -12,38 +13,17 @@ import {
 	Field,
 	FieldLabel,
 	Input,
-	Spinner,
 } from '@agent-collaboration/tool-access-ui/server';
 import * as React from 'react';
 import { renderSVG } from 'uqr';
 
 import type { FactorPageState } from '#sign-in-core/better-auth/factor-enrollment-page';
+import {
+	factorAction,
+	FactorManagementCards,
+	ownerReadyLocation,
+} from '#sign-in-core/pages/factor-management-cards';
 import { IslandRoot } from '#sign-in-core/pages/page-document';
-
-export function factorAction(path: string, resume: string | null): string {
-	return `/api/auth/two-factor/${path}${resume === null ? '' : `?authorize=${encodeURIComponent(resume)}`}`;
-}
-
-export function ownerReadyLocation(resume: string | null): string {
-	return `/owner-ready${resume === null ? '' : `?authorize=${encodeURIComponent(resume)}`}`;
-}
-
-/** A factor form's submit button. Its spinner is hidden until the factor
- * form controller marks the request pending, like every other pending button. */
-function FactorSubmitButton({
-	children,
-}: {
-	readonly children: React.ReactNode;
-}): React.ReactElement {
-	return (
-		<Button type="submit" variant="outline">
-			<span data-pending-indicator hidden>
-				<Spinner />
-			</span>
-			{children}
-		</Button>
-	);
-}
 
 function ConfirmationForm({ resume }: { readonly resume: string | null }): React.ReactElement {
 	return (
@@ -93,6 +73,8 @@ function RecoveryCodes({ codes }: { readonly codes: readonly string[] }): React.
 		</Card>
 	);
 }
+
+export { ownerReadyLocation };
 
 export type FactorPageContent =
 	| {
@@ -327,78 +309,39 @@ function SecurityManagement({ resume }: { readonly resume: string | null }): Rea
 			<h2 id="security-heading" className="text-sm font-medium">
 				Security
 			</h2>
-			<Card>
-				<CardHeader>
-					<CardTitle>Passkeys</CardTitle>
-					<CardDescription>
-						Add a passkey before replacing your app. You must always keep one working app or
-						passkey.
-					</CardDescription>
-				</CardHeader>
-				<CardContent className="flex flex-col gap-3">
-					<IslandRoot
-						state={{ kind: 'passkey-management' }}
-						fallback={
-							<div className="flex flex-col gap-3">
-								<div id="passkey-list" className="flex flex-col gap-3" />
-								<template id="passkey-row">
-									<form className="flex flex-col gap-2">
-										<Field>
-											<FieldLabel>
-												Passkey name
-												<Input name="name" aria-label="Passkey name" />
-											</FieldLabel>
-										</Field>
-										<div className="flex flex-wrap gap-2">
-											<Button type="submit" variant="outline">
-												Rename passkey
-											</Button>
-											<Button type="button" variant="destructive" data-remove-passkey>
-												Remove passkey
-											</Button>
-										</div>
-									</form>
-								</template>
-								<Button type="button" id="add-passkey" variant="outline">
-									Add passkey
-								</Button>
-							</div>
+			<IslandRoot
+				state={{ kind: 'passkey-management' }}
+				fallback={
+					<PasskeyManagementCard
+						addAction={
+							<Button type="button" id="add-passkey" variant="outline">
+								Add passkey
+							</Button>
 						}
-					/>
-				</CardContent>
-			</Card>
-			<Card>
-				<CardHeader>
-					<CardTitle>Recovery codes</CardTitle>
-					<CardDescription>Replacing them makes your current codes stop working.</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<form
-						data-factor-form
-						method="post"
-						action={factorAction('generate-backup-codes', resume)}
 					>
-						<FactorSubmitButton>Replace recovery codes</FactorSubmitButton>
-					</form>
-				</CardContent>
-			</Card>
-			<Card>
-				<CardHeader>
-					<CardTitle>Authenticator app</CardTitle>
-					<CardDescription>
-						To change phones, remove the app, then set up the replacement.
-					</CardDescription>
-				</CardHeader>
-				<CardContent className="flex flex-wrap gap-2">
-					<form data-factor-form method="post" action={factorAction('remove-app', resume)}>
-						<FactorSubmitButton>Remove app before replacing it</FactorSubmitButton>
-					</form>
-					<form data-factor-form method="post" action={factorAction('enable', resume)}>
-						<input type="hidden" name="method" value="totp" />
-						<FactorSubmitButton>Set up replacement app</FactorSubmitButton>
-					</form>
-				</CardContent>
-			</Card>
+						<div id="passkey-list" className="flex flex-col gap-3" />
+						<template id="passkey-row">
+							<form className="flex flex-col gap-2">
+								<Field>
+									<FieldLabel>
+										Passkey name
+										<Input name="name" aria-label="Passkey name" />
+									</FieldLabel>
+								</Field>
+								<div className="flex flex-wrap gap-2">
+									<Button type="submit" variant="outline">
+										Rename passkey
+									</Button>
+									<Button type="button" variant="destructive" data-remove-passkey>
+										Remove passkey
+									</Button>
+								</div>
+							</form>
+						</template>
+					</PasskeyManagementCard>
+				}
+			/>
+			<FactorManagementCards resume={resume} />
 		</section>
 	);
 }

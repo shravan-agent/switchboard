@@ -4,8 +4,22 @@
 /** Switchboard's passkey management: list, add, rename and remove. Composes
  * Better Auth UI's passkey hooks; removal is supplied by the host because the
  * sign-in service offers its own audited removal route. */
+import { Alert } from '@agent-collaboration/tool-access-ui/ui/alert';
 import { Button } from '@agent-collaboration/tool-access-ui/ui/button';
 import { Input } from '@agent-collaboration/tool-access-ui/ui/input';
+import {
+	Item,
+	ItemActions,
+	ItemContent,
+	ItemDescription,
+	ItemGroup,
+	ItemMedia,
+	ItemTitle,
+} from '@agent-collaboration/tool-access-ui/ui/item';
+import {
+	PasskeyListSkeleton,
+	PasskeyManagementCard,
+} from '@auth-ui/components/auth/passkey/passkey-management-card';
 import type { PasskeyAuthClient } from '@better-auth-ui/core/plugins/passkey';
 import { useAuth } from '@better-auth-ui/react';
 import {
@@ -62,18 +76,37 @@ export function PasskeyManager({ removePasskey, labels }: PasskeyManagerProps): 
 		}
 	}
 
+	function add(): void {
+		setFailure(null);
+		// The passkey client can resolve a cancellation or refusal as an error value.
+		addPasskey
+			.mutateAsync({})
+			.then((result) => {
+				if (result.error) setFailure(labels.failed);
+			})
+			.catch(() => setFailure(labels.failed));
+	}
+
 	return (
-		<div className="flex flex-col gap-3">
+		<PasskeyManagementCard
+			addAction={
+				<Button type="button" variant="outline" disabled={addPasskey.isPending} onClick={add}>
+					{labels.add}
+				</Button>
+			}
+		>
+			{passkeys.isPending && <PasskeyListSkeleton />}
+			{passkeys.isError && <Alert variant="destructive">Passkeys are unavailable.</Alert>}
 			{passkeys.isSuccess && (passkeys.data ?? []).length === 0 && (
 				<p className="text-xs text-muted-foreground">{labels.empty}</p>
 			)}
-			<ul className="flex flex-col gap-2">
+			<ItemGroup>
 				{(passkeys.data ?? []).map((passkey) => (
-					<li key={passkey.id} className="flex flex-col gap-2 rounded-md border border-border p-2">
+					<Item key={passkey.id} role="listitem" size="sm" variant="outline">
 						{editing?.id === passkey.id ? (
 							<form
-								className="flex flex-col gap-2"
-								onSubmit={(event) => {
+								className="flex w-full flex-col gap-2"
+								onSubmit={(event): void => {
 									event.preventDefault();
 									updatePasskey
 										.mutateAsync({ id: passkey.id, name: editing.name.trim() })
@@ -84,74 +117,60 @@ export function PasskeyManager({ removePasskey, labels }: PasskeyManagerProps): 
 								<Input
 									aria-label={labels.name}
 									value={editing.name}
-									onChange={(event) => setEditing({ id: passkey.id, name: event.target.value })}
+									onChange={(event): void =>
+										setEditing({ id: passkey.id, name: event.target.value })
+									}
 									autoFocus
 								/>
-								<div className="flex gap-2">
+								<ItemActions>
 									<Button type="submit" variant="outline" disabled={updatePasskey.isPending}>
 										{labels.save}
 									</Button>
-									<Button type="button" variant="ghost" onClick={() => setEditing(null)}>
+									<Button type="button" variant="ghost" onClick={(): void => setEditing(null)}>
 										{labels.cancel}
 									</Button>
-								</div>
+								</ItemActions>
 							</form>
 						) : (
-							<div className="flex items-center gap-2">
-								<KeyRound aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-								<div className="flex min-w-0 flex-1 flex-col">
-									<span className="truncate text-sm">{passkey.name ?? labels.unnamed}</span>
-									<span className="text-xs text-muted-foreground">
-										{addedOn.format(new Date(passkey.createdAt))}
-									</span>
-								</div>
-								<Button
-									type="button"
-									variant="ghost"
-									size="sm"
-									onClick={() => setEditing({ id: passkey.id, name: passkey.name ?? '' })}
-								>
-									{labels.rename}
-								</Button>
-								<Button
-									type="button"
-									variant="destructive"
-									size="sm"
-									disabled={removingId === passkey.id}
-									onClick={() => {
-										remove(passkey.id).catch(() => undefined);
-									}}
-								>
-									{labels.remove}
-								</Button>
-							</div>
+							<>
+								<ItemMedia variant="icon">
+									<KeyRound aria-hidden="true" />
+								</ItemMedia>
+								<ItemContent className="min-w-0">
+									<ItemTitle className="break-all">{passkey.name ?? labels.unnamed}</ItemTitle>
+									<ItemDescription>{addedOn.format(new Date(passkey.createdAt))}</ItemDescription>
+								</ItemContent>
+								<ItemActions>
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										onClick={(): void => setEditing({ id: passkey.id, name: passkey.name ?? '' })}
+									>
+										{labels.rename}
+									</Button>
+									<Button
+										type="button"
+										variant="destructive"
+										size="sm"
+										disabled={removingId === passkey.id}
+										onClick={(): void => {
+											void remove(passkey.id);
+										}}
+									>
+										{labels.remove}
+									</Button>
+								</ItemActions>
+							</>
 						)}
-					</li>
+					</Item>
 				))}
-			</ul>
+			</ItemGroup>
 			{failure !== null && (
-				<p role="alert" className="text-xs text-destructive">
+				<Alert role="alert" variant="destructive">
 					{failure}
-				</p>
+				</Alert>
 			)}
-			<Button
-				type="button"
-				variant="outline"
-				disabled={addPasskey.isPending}
-				onClick={() => {
-					setFailure(null);
-					// Better Auth's passkey client resolves { error } (refused options, a
-					// cancelled ceremony) rather than throwing, so both paths report.
-					addPasskey
-						.mutateAsync({})
-						.then((result) => {
-							if (result.error) setFailure(labels.failed);
-						})
-						.catch(() => setFailure(labels.failed));
-				}}
-			>
-				{labels.add}
-			</Button>
-		</div>
+		</PasskeyManagementCard>
 	);
 }

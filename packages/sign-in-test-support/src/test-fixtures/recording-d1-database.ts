@@ -132,8 +132,12 @@ export function recordingD1Database(
 		}
 		const fault = readFault();
 		if (fault !== null && matchesDatabaseFault(call, fault)) {
-			if (fault.once === true && fault === activeFault) activeFault = null;
-			throw new Error('Injected sign-in driver failure');
+			if (fault.skipMatches !== undefined && fault.skipMatches > 0) {
+				fault.skipMatches -= 1;
+			} else {
+				if (fault.once === true && fault === activeFault) activeFault = null;
+				throw new Error('Injected sign-in driver failure');
+			}
 		}
 	}
 	const observer = createDatabaseReadHold(hold);

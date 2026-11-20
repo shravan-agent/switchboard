@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { organizationChoiceSchema } from '#sign-in-core/contracts/organization-membership';
+import { signedInNavigationStateSchema } from '#sign-in-core/contracts/sign-in-navigation';
 import { organizationIdSchema } from '#sign-in-core/storage/models/sign-in-store';
 
 /** The server decides each page's state; browser islands only render it. Each
@@ -24,6 +25,10 @@ export const signInIslandStateSchema = z.discriminatedUnion('kind', [
 		ownerReadyLocation: sameOriginPathSchema,
 	}),
 	z.strictObject({ kind: z.literal('passkey-management') }),
+	z.strictObject({
+		kind: z.literal('signed-in-navigation'),
+		navigation: signedInNavigationStateSchema,
+	}),
 	z.strictObject({
 		kind: z.literal('person-organization-choice'),
 		choices: z.array(organizationChoiceSchema).readonly(),

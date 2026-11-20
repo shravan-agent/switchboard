@@ -5,7 +5,8 @@
 export function factorFormScript(): string {
 	return `<script>(()=>{
 const pageNonce=document.currentScript?.nonce;
-for(const form of document.querySelectorAll('form[data-factor-form]'))form.addEventListener('submit',async(event)=>{
+document.addEventListener('submit',async(event)=>{
+const form=event.target;if(!(form instanceof HTMLFormElement)||!form.matches('form[data-factor-form]'))return;
 event.preventDefault();const button=event.submitter;const spinner=button?.querySelector('[data-pending-indicator]');
 if(button){button.disabled=true;button.setAttribute('aria-busy','true');}spinner?.removeAttribute('hidden');
 try{const response=await fetch(form.action,{method:'POST',headers:{'content-type':'application/json',accept:'text/html'},body:JSON.stringify(Object.fromEntries(new FormData(form)))});

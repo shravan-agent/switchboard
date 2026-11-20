@@ -27,13 +27,14 @@ it.each([
 		);
 		const context = createContext({
 			document: {
-				querySelectorAll: (selector: string): NodeListOf<Element> =>
-					document.querySelectorAll(selector),
+				addEventListener: (type: string, listener: EventListener): void =>
+					document.addEventListener(type, listener, { once: true }),
 				getElementById: (id: string): HTMLElement | null => document.getElementById(id),
 				open: (): void => undefined,
 				write: (html: string): void => written.resolve(html),
 				close: (): void => undefined,
 			},
+			HTMLFormElement,
 			FormData,
 			fetch,
 			location: {
@@ -93,13 +94,14 @@ it('keeps the active document nonce when a form replaces its page, without rewri
 	const context = createContext({
 		document: {
 			currentScript: { nonce: 'active-document-nonce' },
-			querySelectorAll: (selector: string): NodeListOf<Element> =>
-				document.querySelectorAll(selector),
+			addEventListener: (type: string, listener: EventListener): void =>
+				document.addEventListener(type, listener, { once: true }),
 			open: (): void => undefined,
 			write: (html: string): void => written.resolve(html),
 			close: (): void => undefined,
 		},
 		DOMParser: BrowserNonceDomParser,
+		HTMLFormElement,
 		FormData,
 		fetch: async (): Promise<Response> =>
 			new Response(
@@ -130,10 +132,11 @@ it('shows the pending button spinner while the request runs and hides it again w
 	const response = Promise.withResolvers<Response>();
 	const context = createContext({
 		document: {
-			querySelectorAll: (selector: string): NodeListOf<Element> =>
-				document.querySelectorAll(selector),
+			addEventListener: (type: string, listener: EventListener): void =>
+				document.addEventListener(type, listener, { once: true }),
 			getElementById: (id: string): HTMLElement | null => document.getElementById(id),
 		},
+		HTMLFormElement,
 		FormData,
 		fetch: async (): Promise<Response> => response.promise,
 		Error,

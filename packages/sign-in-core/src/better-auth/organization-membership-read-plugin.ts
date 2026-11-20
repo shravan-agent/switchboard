@@ -16,6 +16,7 @@ import {
 	type OrganizationPersonLookupRequest,
 } from '#sign-in-core/contracts/organization-membership';
 import { mintPageNonce } from '#sign-in-core/contracts/page-nonce';
+import { organizationPeoplePermission } from '#sign-in-core/contracts/sign-in-navigation';
 import type { SignInPlatform } from '#sign-in-core/contracts/sign-in-platform';
 import {
 	transitionCheckedRead,
@@ -78,7 +79,7 @@ export function createOrganizationMembershipReadPlugin(props: {
 				context,
 				personId: personIdSchema.parse(live.value.user.id),
 				organizationId,
-				permission: 'organization:view',
+				permission: organizationPeoplePermission,
 				readMemberRole: props.store.organizations.readMemberRole,
 			});
 			if (permission.kind === 'store-unavailable') return { kind: 'unavailable' };

@@ -8,6 +8,7 @@ import {
 	storedUserSchema,
 	type LiveOwnerSession,
 	type PersonSessionRecords,
+	type SessionRowPresence,
 } from '#sign-in-core/storage/models/person-session-records';
 import type {
 	SignInDatabaseFactory,
@@ -139,6 +140,23 @@ export function createPersonSessionStore(props: {
 			return membership.kind === 'available'
 				? availableStoreValue(membership.value.length === 1)
 				: membership;
+		},
+		async sessionRowByToken(token): Promise<SignInStoreResult<SessionRowPresence>> {
+			const row = await readStoreValue(
+				async () =>
+					(
+						await database()
+							.select({ id: session.id })
+							.from(session)
+							.where(eq(session.token, token))
+							.limit(1)
+					)[0] ?? null,
+				z.object({ id: storedSessionSchema.shape.id }).nullable(),
+			);
+			if (row.kind === 'store-unavailable') return row;
+			return availableStoreValue(
+				row.value === null ? { kind: 'absent' } : { kind: 'present', id: row.value.id },
+			);
 		},
 		readPersonSession: readCurrentSession,
 		providerEmailAllowed,

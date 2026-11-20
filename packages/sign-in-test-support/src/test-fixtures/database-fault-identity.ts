@@ -5,6 +5,7 @@ export const databaseFaultSchema = z.strictObject({
 	projection: z
 		.enum([
 			'membership-facts',
+			'session-id-by-token',
 			'membership-invitations',
 			'people-members',
 			'people-count',
@@ -13,6 +14,7 @@ export const databaseFaultSchema = z.strictObject({
 		])
 		.optional(),
 	once: z.boolean().optional(),
+	skipMatches: z.number().int().nonnegative().optional(),
 	table: z.enum([
 		'user',
 		'session',
@@ -65,6 +67,8 @@ export function organizationReadProjection(
 ): DatabaseFault['projection'] | null {
 	const query = call.query.replaceAll(/\s+/gu, ' ').trim();
 	if (!/^select\b/iu.test(query)) return null;
+	if (query.startsWith('select "id" from "session" where "session"."token" ='))
+		return 'session-id-by-token';
 	if (query.startsWith('select "member"."role" from "member" inner join "user"'))
 		return 'membership-facts';
 	if (query.startsWith('select "user"."name", "user"."email", "member"."role" from "member"'))

@@ -37,6 +37,8 @@ export interface OwnerPageProps {
 	readonly configuration: SignInConfiguration;
 	readonly resume: string | null;
 	readonly createOrganization?: boolean;
+	readonly noOrganization?: boolean;
+	readonly showNavigationLink?: boolean;
 	/** The selected organization's Fleet setup, shown to its owner (B2). */
 	readonly organizationSetup?: {
 		readonly organizationId: string;
@@ -315,7 +317,11 @@ export function OwnerPage(props: OwnerPageProps): React.ReactElement {
 			<>
 				<Card>
 					<CardHeader>
-						<CardDescription>You're signed in.</CardDescription>
+						<CardDescription>
+							{props.noOrganization === true
+								? 'You do not belong to an organization.'
+								: "You're signed in."}
+						</CardDescription>
 					</CardHeader>
 					<CardFooter>
 						<ContinueToCli prominence="primary" disabled={false} />
@@ -359,6 +365,12 @@ export function OwnerPage(props: OwnerPageProps): React.ReactElement {
 
 /** Secondary actions under the page's one task. */
 export function OwnerPageFooter(props: OwnerPageProps): React.ReactElement | undefined {
+	if (props.showNavigationLink === true)
+		return (
+			<a className="font-medium text-foreground underline-offset-4 hover:underline" href="/me">
+				Go to Me
+			</a>
+		);
 	if (!props.ready || continueIsThePageTask(props)) return undefined;
 	return <ContinueToCli prominence="link" disabled={props.selectionRequired} />;
 }

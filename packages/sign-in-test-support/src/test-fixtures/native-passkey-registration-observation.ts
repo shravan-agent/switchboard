@@ -184,7 +184,7 @@ export function createNativePasskeyRegistrationObservation(props: {
 }
 
 const committedPasskeyList =
-	"[...document.querySelectorAll('[data-sign-in-island][data-sign-in-island-mounted]')].some(root=>{try{const state=JSON.parse(root.dataset.islandState||'null');return state?.kind==='passkey-management'&&(root.querySelector('ul > li')!==null||[...root.querySelectorAll('p')].some(paragraph=>paragraph.textContent?.trim()==='No passkeys yet.'));}catch{return false;}})";
+	"[...document.querySelectorAll('[data-sign-in-island][data-sign-in-island-mounted]')].some(root=>{try{const state=JSON.parse(root.dataset.islandState||'null');return state?.kind==='passkey-management'&&(root.querySelector('[data-slot=item]')!==null||[...root.querySelectorAll('p')].some(paragraph=>paragraph.textContent?.trim()==='No passkeys yet.'));}catch{return false;}})";
 
 /** Wait for the delivered list render before measuring the control that follows it. */
 export async function registerNativePasskey(props: {

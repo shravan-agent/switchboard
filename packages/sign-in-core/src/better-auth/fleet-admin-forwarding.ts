@@ -1,6 +1,7 @@
 import { decodeJwt } from 'jose';
 import { z } from 'zod';
 
+import { isSameOriginSignInPost } from '#sign-in-core/better-auth/sign-in-cookie-origin';
 import type { FleetAdminAnswer } from '#sign-in-core/central-link/fleet-admin-client';
 import {
 	createFleetAdminProofKey,
@@ -64,9 +65,7 @@ export async function forwardFleetAdminRequest(props: {
 }): Promise<Response> {
 	const noStore = { 'cache-control': 'no-store' };
 	if (
-		props.request.method !== 'POST' ||
-		props.request.headers.has('authorization') ||
-		props.request.headers.get('origin') !== new URL(props.configuration.issuer).origin
+		!isSameOriginSignInPost(props.request.method, props.request.headers, props.configuration.issuer)
 	)
 		return Response.json({ error: 'not-allowed' }, { status: 403, headers: noStore });
 	const input: unknown = await props.request.json().catch(() => null);

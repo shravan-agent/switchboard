@@ -21,7 +21,7 @@ export function OrganizationChooserCard(props: OrganizationChooserCardProps): Re
 				<ul aria-label="Your organizations" className="flex flex-col">
 					{props.choices.map((choice) => {
 						const current = choice.organizationId === props.activeOrganizationId;
-						const canChoose = props.choices.length >= 2 && !current;
+						const canChoose = !current;
 						return (
 							<li key={choice.organizationId} className="px-2">
 								<Button

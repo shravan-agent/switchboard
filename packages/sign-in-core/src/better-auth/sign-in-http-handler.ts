@@ -1,10 +1,7 @@
 import { decodeBasicCredentials } from '@better-auth/core/oauth2';
 import { decodeJwt, decodeProtectedHeader } from 'jose';
 
-import {
-	renderFactorFormResponse,
-	type FactorPageState,
-} from '#sign-in-core/better-auth/factor-enrollment-page';
+import { renderFactorFormResponse } from '#sign-in-core/better-auth/factor-enrollment-page';
 import {
 	forwardFleetAdminRequest,
 	isFleetAdminForwardingRoute,
@@ -25,7 +22,6 @@ import {
 	createOrganizationFleetCallGuard,
 	createOrganizationFleetCallRunner,
 } from '#sign-in-core/better-auth/organization-fleet-call-guard';
-import { readNativeOrganizationSessionView } from '#sign-in-core/better-auth/organization-read-session';
 import { bootstrapOwnerClient } from '#sign-in-core/better-auth/owner-client-bootstrap';
 import { completePasskeySignIn } from '#sign-in-core/better-auth/passkey-sign-in-completion';
 import {
@@ -38,16 +34,19 @@ import {
 } from '#sign-in-core/better-auth/provider-request-state';
 import { readProviderRouterBody } from '#sign-in-core/better-auth/provider-router-body';
 import {
+	readSignedInNavigationAccount,
+	respondToSignedInNavigation,
+	signedInNavigationMembership,
+} from '#sign-in-core/better-auth/sign-in-navigation';
+import {
 	agentRegistrationPorts,
 	personSessionPorts,
 	workspaceResourcePorts,
 	requireStoredValue,
 } from '#sign-in-core/better-auth/store-result-adapters';
-import type { OrganizationChoice } from '#sign-in-core/contracts/organization-membership';
-import { uuid7Schema } from '#sign-in-core/contracts/sign-in-platform';
+import { isSignedInNavigationPath } from '#sign-in-core/contracts/sign-in-navigation';
 import { runAuthorizationRevisionDrain } from '#sign-in-core/organizations/authorization-revision-drainer';
 import type { OrganizationFleetState } from '#sign-in-core/organizations/organization-provisioning';
-import { readPersonOrganizationContext } from '#sign-in-core/organizations/person-organization-context';
 import { pageAssetResponse } from '#sign-in-core/pages/page-document';
 import {
 	admitSignInRequest,
@@ -62,8 +61,6 @@ import {
 	accessTokenReleaseClaimsSchema,
 	type SignInResponseReleasePorts,
 } from '#sign-in-core/response-release/sign-in-response-release';
-import { decideRecentSecondFactor } from '#sign-in-core/second-factors/second-factor-step-up';
-import { personIdSchema, type OrganizationId } from '#sign-in-core/storage/models/sign-in-store';
 
 export type SignInHttpConfiguration = Omit<
 	SignInProviderProps,
@@ -207,6 +204,19 @@ export function createSignInHttpHandler(
 				});
 			if (isFleetAdminForwardingRoute(url.pathname) || url.pathname === organizationAdminPagePath)
 				return await respondToOrganizationAdmin(request, url.pathname, state);
+			if (isSignedInNavigationPath(url.pathname))
+				return await respondToSignedInNavigation({
+					page: url.pathname,
+					url,
+					headers: request.headers,
+					provider: createSignInProvider({
+						...configuration,
+						requestState: state,
+						authority: { kind: 'public' },
+					}),
+					store: configuration.store,
+					platform: configuration.platform,
+				});
 			// Validate continuation before any native factor mutation, not after
 			// confirmation has already rotated the browser's session cookie.
 			const factorContinuation = url.pathname.startsWith('/api/auth/two-factor/')
@@ -245,70 +255,41 @@ export function createSignInHttpHandler(
 				let organizationSetup:
 					| { readonly organizationId: string; readonly state: OrganizationFleetState }
 					| undefined;
-				let factorPage: FactorPageState = 'hidden';
-				let memberships: readonly OrganizationChoice[] = [];
-				let activeOrganizationId: OrganizationId | null = null;
-				let selectionRequired = false;
-				if (url.pathname === '/owner-ready') {
-					const auth = createSignInProvider({
-						...configuration,
-						requestState: state,
-						authority: { kind: 'public' },
-					});
-					const current = await auth.api.getSession({
-						headers: request.headers,
-						query: { disableCookieCache: true, disableRefresh: true },
-					});
-					const organizationContext = await readPersonOrganizationContext({
-						session: readNativeOrganizationSessionView(current),
-						store: configuration.store.organizations,
-					});
-					if (organizationContext.kind === 'unavailable')
-						throw new Error('Organization context unavailable');
-					if (organizationContext.kind === 'available') {
-						memberships = organizationContext.choices;
-						activeOrganizationId = organizationContext.activeOrganizationId;
-						selectionRequired = memberships.length >= 2 && activeOrganizationId === null;
-					}
-					if (current !== null && current.user.emailVerified) {
-						const selected = memberships.find(
-							(membership) => membership.organizationId === activeOrganizationId,
-						);
-						if (selected?.role === 'owner') {
-							const fleetState = requireStoredValue(
-								await configuration.store.organizations.readFleetState(selected.organizationId),
-							);
-							if (fleetState !== null)
-								organizationSetup = { organizationId: selected.organizationId, state: fleetState };
-						}
-						createOrganization =
-							current.user.email.toLowerCase() ===
-								configuration.configuration.ownerEmail.toLowerCase() && memberships.length === 0;
-						const factors = requireStoredValue(
-							await configuration.store.factors.readSession(
-								personIdSchema.parse(current.user.id),
-								uuid7Schema.parse(current.session.id),
-							),
-						);
-						if (factors !== null)
-							factorPage =
-								factors.enrollment.kind === 'never-enrolled'
-									? 'enroll-app'
-									: decideRecentSecondFactor({
-												now: configuration.platform.clock.now(),
-												confirmation: factors.confirmation,
-										  }).kind === 'confirmed'
-										? 'confirmed'
-										: 'confirm';
-					}
+				const account =
+					url.pathname === '/owner-ready'
+						? await readSignedInNavigationAccount({
+								provider: createSignInProvider({
+									...configuration,
+									requestState: state,
+									authority: { kind: 'public' },
+								}),
+								headers: request.headers,
+								store: configuration.store,
+								clock: configuration.platform.clock,
+							})
+						: null;
+				const memberships = account?.choices ?? [];
+				const activeOrganizationId = account?.activeOrganization?.organizationId ?? null;
+				const selectionRequired = memberships.length > 0 && activeOrganizationId === null;
+				if (account?.activeOrganization?.role === 'owner') {
+					const organizationId = account.activeOrganization.organizationId;
+					const fleetState = requireStoredValue(
+						await configuration.store.organizations.readFleetState(organizationId),
+					);
+					if (fleetState !== null) organizationSetup = { organizationId, state: fleetState };
 				}
+				createOrganization =
+					account?.email.toLowerCase() === configuration.configuration.ownerEmail.toLowerCase() &&
+					memberships.length === 0;
 				return minimalOwnerPage({
 					crypto: configuration.platform.crypto,
 					memberships,
 					activeOrganizationId,
 					selectionRequired,
 					...(organizationSetup === undefined ? {} : { organizationSetup }),
-					factorPage,
+					factorPage: account?.factorPage ?? 'hidden',
+					showNavigationLink: signedInNavigationMembership(account, url) !== null,
+					noOrganization: account !== null && memberships.length === 0 && !createOrganization,
 					createOrganization,
 					ready: url.pathname === '/owner-ready',
 					configuration: configuration.configuration,

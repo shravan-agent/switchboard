@@ -79,6 +79,7 @@ export function createSignInStore(props: {
 				persons.isPersonOrganizationSessionActive,
 			),
 			readPersonSession: closeStoreFailure(persons.readPersonSession),
+			sessionRowByToken: closeStoreFailure(persons.sessionRowByToken),
 			providerEmailAllowed: closeStoreFailure(persons.providerEmailAllowed),
 			ensurePersonActive: closeStoreFailure(persons.ensurePersonActive),
 			readOwnerSession: closeStoreFailure(persons.readOwnerSession),

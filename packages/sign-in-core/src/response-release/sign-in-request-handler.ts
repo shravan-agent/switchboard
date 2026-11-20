@@ -1,4 +1,8 @@
 import {
+	isSignedInNavigationPath,
+	switchboardSignOutPath,
+} from '#sign-in-core/contracts/sign-in-navigation';
+import {
 	organizationRequestErrorResponse,
 	organizationReadResponse,
 } from '#sign-in-core/response-release/organization-request-errors';
@@ -10,6 +14,8 @@ import {
 
 /** Provider sign-in, tokens and the audited redirect login-link flow are public. */
 export function isPublicSignInRoute(pathname: string, method: string): boolean {
+	if (pathname === switchboardSignOutPath) return method === 'POST';
+	if (isSignedInNavigationPath(pathname)) return method === 'GET';
 	if (pathname === '/api/auth/link-social') return method === 'POST';
 	// Cookie-bound reads for the sign-in pages' browser components (owner, 12 Nov).
 	// The session token is stripped from get-session before it reaches scripts.

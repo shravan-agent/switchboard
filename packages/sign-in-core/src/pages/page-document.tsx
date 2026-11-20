@@ -172,6 +172,7 @@ export function pageContentSecurityPolicy(nonce: string, challenge: PageChalleng
  * pages island; user values enter JSX as text. */
 export function pageDocument(props: {
 	readonly title: string;
+	readonly layout?: 'shell';
 	readonly children: React.ReactNode;
 	readonly scripts: string;
 	readonly challenge: PageChallenge;
@@ -197,18 +198,22 @@ export function pageDocument(props: {
 				<link rel="stylesheet" href={signInStylesheetPath} />
 			</head>
 			<body>
-				<main className="mx-auto flex min-h-svh w-full max-w-md flex-col justify-center gap-6 px-4 py-10">
-					<header className="flex flex-col items-center gap-1 text-center">
-						<p className="text-sm font-medium text-muted-foreground">Switchboard</p>
-						<h1 className="text-xl font-medium">{props.title}</h1>
-					</header>
-					{props.children}
-					{props.footer !== undefined && (
-						<footer className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-							{props.footer}
-						</footer>
-					)}
-				</main>
+				{props.layout === 'shell' ? (
+					props.children
+				) : (
+					<main className="mx-auto flex min-h-svh w-full max-w-md flex-col justify-center gap-6 px-4 py-10">
+						<header className="flex flex-col items-center gap-1 text-center">
+							<p className="text-sm font-medium text-muted-foreground">Switchboard</p>
+							<h1 className="text-xl font-medium">{props.title}</h1>
+						</header>
+						{props.children}
+						{props.footer !== undefined && (
+							<footer className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+								{props.footer}
+							</footer>
+						)}
+					</main>
+				)}
 			</body>
 		</html>,
 	);
