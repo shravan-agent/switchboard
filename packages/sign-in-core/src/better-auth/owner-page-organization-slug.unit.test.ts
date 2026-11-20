@@ -50,11 +50,8 @@ async function servedOrganizationForm(): Promise<{
 	const served = new DOMParser().parseFromString(await response.text(), 'text/html');
 	document.body.innerHTML = served.body.innerHTML;
 	const context = createContext({
-		document: {
-			getElementById: (id: string): HTMLElement | null => document.getElementById(id),
-			querySelectorAll: (selector: string): NodeListOf<Element> =>
-				document.querySelectorAll(selector),
-		},
+		document,
+		HTMLFormElement,
 		fetch: async (): Promise<Response> => Response.json([]),
 		FormData,
 		Uint8Array,
