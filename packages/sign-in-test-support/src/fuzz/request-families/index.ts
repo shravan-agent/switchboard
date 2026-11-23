@@ -44,6 +44,10 @@ import { requestFamily as relayApprovalListFamily } from './relay-approval-list'
 import { requestFamily as relayApprovalReadFamily } from './relay-approval-read';
 import { requestFamily as relayChangeRecordsFamily } from './relay-change-records';
 import { requestFamily as relayCreateWorkspaceFamily } from './relay-create-workspace';
+import { requestFamily as relayEngineDiscardFamily } from './relay-engine-discard';
+import { requestFamily as relayEngineHealthFamily } from './relay-engine-health';
+import { requestFamily as relayEngineRetiredFamily } from './relay-engine-retired';
+import { requestFamily as relayEngineRetryFamily } from './relay-engine-retry';
 import { requestFamily as relayWorkspaceLookupFamily } from './relay-workspace-lookup';
 import { requestFamily as shellMeFamily } from './shell-me';
 import { requestFamily as shellPeopleFamily } from './shell-people';
@@ -94,6 +98,10 @@ export const requestFamilies = [
 	relayApprovalListFamily,
 	relayApprovalReadFamily,
 	relayApprovalDecideFamily,
+	relayEngineHealthFamily,
+	relayEngineRetiredFamily,
+	relayEngineRetryFamily,
+	relayEngineDiscardFamily,
 	passkeyVerifyRegistrationFamily,
 	passkeyUpdateFamily,
 	passkeyRemoveFamily,
