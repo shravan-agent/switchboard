@@ -9,6 +9,7 @@ import {
 	approvalsCommandName,
 	runApprovalsCommand,
 } from '#sign-in-owner-cli/fleet/approvals-cli-command';
+import { engineCommandName, runEngineCommand } from '#sign-in-owner-cli/fleet/engine-cli-command';
 import {
 	deviceSignInUnavailable,
 	isFleetCommand,
@@ -60,6 +61,8 @@ export async function runOwnerCli(
 			.write(`Usage: mise exec -- node scripts/verify-auth/owner-cli.ts --target FILE COMMAND [OPTIONS]
 Commands: login | add-agent --persona PROFILE --request-id UUID [--client-id ID | --output FILE] | remove-agent --client-id ID --request-id UUID | retire-agent --client-id ID --request-id UUID | agent-status --client-id ID
 Fleet commands: fleet-login | fleet-create-workspace --operation-id UUID --name NAME [--description TEXT] | fleet-workspace-lookup --workspace-id UUID | fleet-change-records [--after ID] [--limit N]
+Engine (organization owner, fleet credential): engine health | engine retired [--cursor ID] | engine retry ATTEMPT_ID [--operation-id UUID] | engine discard ATTEMPT_ID [--operation-id UUID]
+engine retired asks again while central's cursor is non-null, through empty pages, until the end; retry and discard confirm a recent second factor when central asks.
 Approvals (organization owner, fleet credential): approvals list [--all] [--cursor ID] | approvals show REQUEST_ID | approvals approve REQUEST_ID [--option ID] [--operation-id UUID] | approvals deny REQUEST_ID [--option ID] [--operation-id UUID] | approvals answer REQUEST_ID --field FIELD_ID=VALUE... | approvals answer REQUEST_ID --operation-id UUID --answer JSON
 approve/deny: an unproven call is allowed or declined; a provider approval takes its single allow (approve) or decline (deny) option, or the --option named, as show lists them.
 answer: a question's fields as FIELD_ID=VALUE (text, a decimal number, true or false, one option id, or comma-separated option ids for a multi-choice field).
@@ -75,6 +78,19 @@ This switch makes no hardware-presence or per-command human-intent claim. Every 
 			const target = await readAuthTarget(z.string().min(1).parse(values.target));
 			if (positionals[0] === approvalsCommandName)
 				return await runApprovalsCommand({
+					arguments: positionals.slice(1),
+					target,
+					options: values,
+					environment:
+						fleetEnvironment ??
+						nodeFleetCliEnvironment({
+							noBrowser: values['no-browser'] === true,
+							memoryOnly: values['memory-only'] === true,
+							openBrowser,
+						}),
+				});
+			if (positionals[0] === engineCommandName)
+				return await runEngineCommand({
 					arguments: positionals.slice(1),
 					target,
 					options: values,
