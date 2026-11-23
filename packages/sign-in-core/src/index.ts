@@ -60,6 +60,8 @@ export * from '#sign-in-core/organizations/fleet-admin-operation';
 export * from '#sign-in-core/central-link/approval-person-client';
 export * from '#sign-in-core/central-link/approval-person-replies';
 export * from '#sign-in-core/central-link/approval-person-results';
+export * from '#sign-in-core/central-link/engine-admin-replies';
+export * from '#sign-in-core/central-link/engine-admin-results';
 export * from '#sign-in-core/organizations/approval-person-operation';
 export {
 	approvalOperationIdSchema,

@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 import type { CentralTransport } from '#sign-in-core/central-link/central-transport';
+import { engineAdminResultSchemas } from '#sign-in-core/central-link/engine-admin-replies';
+import { engineAdminPreflightStatuses } from '#sign-in-core/central-link/engine-admin-results';
 import type {
 	AdminRefusal,
 	ListWorkspacesResult_Serialize,
@@ -28,6 +30,7 @@ import {
 import {
 	fleetAdminRequestBody,
 	fleetAdminRoutePaths,
+	isEngineAdminOperation,
 	type FleetAdminRequest,
 } from '#sign-in-core/organizations/fleet-admin-operation';
 import type { CentralLinkUncertainty } from '#sign-in-core/organizations/organization-provisioning';
@@ -64,7 +67,8 @@ const signInAdminRefusalReasons = [
 	'rejected',
 ] as const satisfies readonly AdminRefusal[];
 
-// All three current Sign-in routes share this subset; engine operations own the other reasons.
+// The workspace and change-record routes share this subset; each engine route owns its own reasons
+// (engine-admin-results.ts).
 export type FleetAdminRefusalReason = Extract<
 	AdminRefusal,
 	(typeof signInAdminRefusalReasons)[number]
@@ -158,6 +162,7 @@ export const fleetAdminResultSchemas = {
 		z.strictObject({ result: z.literal('records'), records: z.array(changeRecordSchema) }),
 		refusedSchema,
 	]),
+	...engineAdminResultSchemas,
 } as const;
 type GeneratedAdminRefusal = Extract<OrganizationAdminResult_Serialize, { result: 'refused' }>;
 type SignInAdminWireResult =
@@ -323,20 +328,60 @@ export async function postPersonRequestToCentral(
 	}
 }
 
+/** A non-200 answer that carries no result, in the shape every admin route reads. */
+type FleetAdminStatusAnswer = Exclude<FleetAdminAnswer<never>, { readonly kind: 'answered' }>;
+
+/** The workspace, change-record and revocation routes: 401, 400 and 503 keep their meaning. */
+function adminStatusAnswer(status: number): FleetAdminStatusAnswer {
+	if (status === 401) return { kind: 'unauthenticated' };
+	if (status === 400) return { kind: 'request-refused' };
+	if (status === 503) return { kind: 'answered-unavailable' };
+	return { kind: 'unknown', reason: 'unavailable' };
+}
+
+/**
+ * Each pre-admission row of central's engine table (`engine-admin-results.ts`), as sign-in reads
+ * it. An oversized body and an unaddressable one are sign-in's own defect, never retried. The
+ * relay only ever sends POST, so a 405 means the link does not reach central's engine route. An
+ * empty 503 is central unavailable: no transaction outcome can be read from it.
+ */
+const enginePreflightAnswers = {
+	oversizedUpload: { kind: 'request-refused' },
+	methodNotPost: { kind: 'unknown', reason: 'unavailable' },
+	missingProof: { kind: 'unauthenticated' },
+	badOrganizationAddress: { kind: 'request-refused' },
+	verificationFailed: { kind: 'unauthenticated' },
+	unavailable: { kind: 'answered-unavailable' },
+} as const satisfies Readonly<
+	Record<keyof typeof engineAdminPreflightStatuses, FleetAdminStatusAnswer>
+>;
+
+function isEnginePreflightRow(name: string): name is keyof typeof engineAdminPreflightStatuses {
+	return Object.hasOwn(engineAdminPreflightStatuses, name);
+}
+
+/** An engine route's non-200 status through the table; a status outside it is unknown. */
+export function engineAdminStatusAnswer(status: number): FleetAdminStatusAnswer {
+	for (const name of Object.keys(engineAdminPreflightStatuses))
+		if (isEnginePreflightRow(name) && engineAdminPreflightStatuses[name].status === status)
+			return enginePreflightAnswers[name];
+	return { kind: 'unknown', reason: 'unavailable' };
+}
+
 /** One send per call; the admin routes travel the private link like every other central call. */
 export function createFleetAdminLinkClient(
 	transport: CentralTransport,
 ): FleetAdminLinkClient & { readonly revokeMachineEnrollment: RevokeMachineEnrollment } {
 	async function send<TResult>(
-		props: CentralPersonPost & { readonly resultSchema: z.ZodType<TResult> },
+		props: CentralPersonPost & {
+			readonly resultSchema: z.ZodType<TResult>;
+			readonly statusAnswer: (status: number) => FleetAdminStatusAnswer;
+		},
 	): Promise<FleetAdminAnswer<TResult>> {
 		const posted = await postPersonRequestToCentral(transport, props);
 		if (posted.kind === 'unknown') return posted;
 		const { response } = posted;
-		if (response.status === 401) return { kind: 'unauthenticated' };
-		if (response.status === 400) return { kind: 'request-refused' };
-		if (response.status === 503) return { kind: 'answered-unavailable' };
-		if (response.status !== 200) return { kind: 'unknown', reason: 'unavailable' };
+		if (response.status !== 200) return props.statusAnswer(response.status);
 		let payload: unknown;
 		try {
 			payload = await response.json();
@@ -355,6 +400,9 @@ export function createFleetAdminLinkClient(
 				authorization: `DPoP ${props.accessToken}`,
 				proof: props.proof,
 				body: JSON.stringify(fleetAdminRequestBody(props.operation)),
+				statusAnswer: isEngineAdminOperation(props.operation.operation)
+					? engineAdminStatusAnswer
+					: adminStatusAnswer,
 				...(props.signal === undefined ? {} : { signal: props.signal }),
 			}),
 		relayFleetAdminRequest: async (props) =>
@@ -362,11 +410,15 @@ export function createFleetAdminLinkClient(
 				...props,
 				path: fleetAdminRoutePaths[props.operation],
 				resultSchema: fleetAdminResultSchemas[props.operation],
+				statusAnswer: isEngineAdminOperation(props.operation)
+					? engineAdminStatusAnswer
+					: adminStatusAnswer,
 			}),
 		revokeMachineEnrollment: async (props) =>
 			send({
 				path: revokeMachineEnrollmentPath,
 				resultSchema: revokeMachineEnrollmentResultSchema,
+				statusAnswer: adminStatusAnswer,
 				authorization: `DPoP ${props.accessToken}`,
 				proof: props.proof,
 				body: JSON.stringify({

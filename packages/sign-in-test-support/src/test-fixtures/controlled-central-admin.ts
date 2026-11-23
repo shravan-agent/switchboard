@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 import {
 	fleetAdminRequestSchema,
 	fleetAdminRoutePaths,
+	isEngineAdminOperation,
+	type EngineAdminOperationName,
 	type FleetAdminRequest,
 	type fleetAdminResultSchemas,
 } from '@agent-collaboration/sign-in-core';
@@ -25,9 +27,12 @@ import { z } from 'zod';
  * earns no credit for central's ledger, organization isolation or Rust admission; only the
  * sign-in side's sends are proven here.
  */
-export type AdminRouteName = FleetAdminRequest['operation'];
+export type AdminRouteName = Exclude<FleetAdminRequest['operation'], EngineAdminOperationName>;
+/** The engine routes have their own stand-in (controlled-central-engine.ts). */
 export const adminRouteByPath: Readonly<Record<string, AdminRouteName>> = Object.fromEntries(
-	Object.entries(fleetAdminRoutePaths).map(([operation, path]) => [path, operation]),
+	Object.entries(fleetAdminRoutePaths)
+		.filter(([operation]) => !isEngineAdminOperation(operation))
+		.map(([operation, path]) => [path, operation]),
 ) as Readonly<Record<string, AdminRouteName>>;
 
 /** Central's `SECOND_FACTOR_WINDOW_SECONDS` (request_admission.rs:17). */

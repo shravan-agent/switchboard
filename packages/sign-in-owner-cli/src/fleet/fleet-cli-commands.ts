@@ -182,6 +182,7 @@ export async function runFleetCommand(props: {
 		case 'unauthenticated':
 			environment.write('Central refused the fleet credential; run fleet-login again.');
 			return 1;
+		case 'unavailable':
 		case 'unknown':
 			environment.write(
 				operation.operation === 'CreateWorkspace'

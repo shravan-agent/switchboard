@@ -2,7 +2,10 @@ import { decodeJwt } from 'jose';
 import { z } from 'zod';
 
 import { isSameOriginSignInPost } from '#sign-in-core/better-auth/sign-in-cookie-origin';
-import type { FleetAdminAnswer } from '#sign-in-core/central-link/fleet-admin-client';
+import {
+	fleetAdminRefusalReasonSchema,
+	type FleetAdminAnswer,
+} from '#sign-in-core/central-link/fleet-admin-client';
 import {
 	createFleetAdminProofKey,
 	fleetAdminProofKeyThumbprint,
@@ -199,10 +202,18 @@ export async function listWorkspacesForPerson(
 			return { result: 'refused', reason: 'notPermitted' };
 		const answer = await sendSignedFleetAdminRequest({ ...props, operation: parsed.data });
 		switch (answer.kind) {
-			case 'answered':
-				if (answer.result.result === 'workspaces' || answer.result.result === 'refused')
-					return answer.result;
-				return { result: 'unavailable' };
+			case 'answered': {
+				if (answer.result.result === 'workspaces') return answer.result;
+				// The list's own schema admits only the workspace routes' reasons; an engine route's
+				// reason never reaches here, and is read as no answer if it ever did.
+				const reason =
+					answer.result.result === 'refused'
+						? fleetAdminRefusalReasonSchema.safeParse(answer.result.reason)
+						: null;
+				return reason?.success === true
+					? { result: 'refused', reason: reason.data }
+					: { result: 'unavailable' };
+			}
 			case 'credential-refused':
 			case 'organization-mismatch':
 				return { result: 'refused', reason: 'notPermitted' };

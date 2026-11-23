@@ -81,7 +81,9 @@ export async function sendApprovalOperation<Operation extends ApprovalPersonOper
 		body: approvalPersonRequestBody(props.operation),
 		readReply: replyReaders[name],
 	});
-	return answer.kind === 'answered' ? answer.reply : answer;
+	if (answer.kind === 'answered') return answer.reply;
+	// C3 reads a 503 as no answer, as before: its decide recovery repeats with the same operation id.
+	return answer.kind === 'unavailable' ? { kind: 'unknown' } : answer;
 }
 
 /**

@@ -1,11 +1,13 @@
 import { z } from 'zod';
 
 import type {
+	AdminOperationId,
 	ApprovalIntent_Serialize,
 	CreateWorkspaceRequest_Deserialize,
 	ListWorkspacesRequest_Deserialize,
 	ListWorkspacesRequest_Serialize,
 	OrganizationAdminIntent_Serialize,
+	OrganizationId,
 	ReadChangeRecordsRequest_Deserialize,
 	ReadChangeRecordsRequest_Serialize,
 	WorkspaceLookupRequest,
@@ -51,13 +53,75 @@ export const fleetAdminRequestSchema = z.discriminatedUnion('operation', [
 		after: z.uuid().nullable(),
 		limit: z.number().int().min(1).max(100),
 	}),
+	// DEL-07: central's engine administration bodies (4593797b1, admin_operations.rs:199-226).
+	// Every ID is a canonical lowercase UUIDv7: the form central's `uuid::Uuid` serializes back
+	// into the signed intent, so the bytes sign-in signs are the bytes central rebuilds.
+	z.strictObject({
+		operation: z.literal('EngineHealth'),
+		organizationId: centralUuid7Schema,
+	}),
+	z.strictObject({
+		operation: z.literal('EngineListRetired'),
+		organizationId: centralUuid7Schema,
+		/** The previous page's `next`, even when its items were empty; null starts a walk. */
+		after: centralUuid7Schema.nullable(),
+		limit: z.number().int().min(1).max(100),
+	}),
+	z.strictObject({
+		operation: z.literal('EngineRetry'),
+		organizationId: centralUuid7Schema,
+		/** Minted once per command and kept on its resend; central's receipt key. */
+		operationId: centralUuid7Schema,
+		attemptId: centralUuid7Schema,
+	}),
+	z.strictObject({
+		operation: z.literal('EngineDiscard'),
+		organizationId: centralUuid7Schema,
+		operationId: centralUuid7Schema,
+		attemptId: centralUuid7Schema,
+	}),
 ]);
+
+/** The four engine operations central's admin wire carries since 4593797b1. */
+export const engineAdminOperationNames = [
+	'EngineHealth',
+	'EngineListRetired',
+	'EngineRetry',
+	'EngineDiscard',
+] as const;
+export type EngineAdminOperationName = (typeof engineAdminOperationNames)[number];
+export function isEngineAdminOperation(operation: string): operation is EngineAdminOperationName {
+	return engineAdminOperationNames.some((engine) => engine === operation);
+}
+/** An engine operation's signed intent params, as central's generated intent names them. */
+type EngineIntentParams<Operation extends EngineAdminOperationName> = Extract<
+	OrganizationAdminIntent_Serialize,
+	{ operation: Operation }
+>['params'];
+/**
+ * Central exports no request type for the engine bodies (`EngineHealthRequest`,
+ * `EngineListRetiredRequest` and `EngineAttemptRequest` derive no specta type), so each body is
+ * the organization address, the operation ID for a change, and the generated intent's params:
+ * exactly the fields central decodes into that intent.
+ */
+type EngineWireBodies = {
+	EngineHealth: { organizationId: OrganizationId };
+	EngineListRetired: { organizationId: OrganizationId } & EngineIntentParams<'EngineListRetired'>;
+	EngineRetry: {
+		organizationId: OrganizationId;
+		operationId: AdminOperationId;
+	} & EngineIntentParams<'EngineRetry'>;
+	EngineDiscard: {
+		organizationId: OrganizationId;
+		operationId: AdminOperationId;
+	} & EngineIntentParams<'EngineDiscard'>;
+};
 type FleetAdminWireBodies = {
 	CreateWorkspace: CreateWorkspaceRequest_Deserialize;
 	WorkspaceLookup: WorkspaceLookupRequest;
 	ListWorkspaces: ListWorkspacesRequest_Deserialize;
 	ReadChangeRecords: ReadChangeRecordsRequest_Deserialize;
-};
+} & EngineWireBodies;
 type FleetAdminRequestBodies = Omit<
 	FleetAdminWireBodies,
 	'ReadChangeRecords' | 'ListWorkspaces'
@@ -115,6 +179,10 @@ export const fleetAdminRoutePaths = {
 	WorkspaceLookup: '/organization-admin/v1/workspace-lookup',
 	ListWorkspaces: listWorkspacesPath,
 	ReadChangeRecords: '/organization-admin/v1/change-records',
+	EngineHealth: '/organization-admin/v1/engine-health',
+	EngineListRetired: '/organization-admin/v1/engine-retired',
+	EngineRetry: '/organization-admin/v1/engine-retry',
+	EngineDiscard: '/organization-admin/v1/engine-discard',
 } as const satisfies Record<FleetAdminRequest['operation'], string>;
 
 /** The closed JSON body central parses for the route; the body never names its operation. */
@@ -140,6 +208,23 @@ export function fleetAdminRequestBody(operation: FleetAdminRequest): CanonicalJs
 				after: operation.after,
 				limit: operation.limit,
 			} satisfies FleetAdminWireBodies['ReadChangeRecords'];
+		case 'EngineHealth':
+			return {
+				organizationId: operation.organizationId,
+			} satisfies EngineWireBodies['EngineHealth'];
+		case 'EngineListRetired':
+			return {
+				organizationId: operation.organizationId,
+				after: operation.after,
+				limit: operation.limit,
+			} satisfies EngineWireBodies['EngineListRetired'];
+		case 'EngineRetry':
+		case 'EngineDiscard':
+			return {
+				organizationId: operation.organizationId,
+				operationId: operation.operationId,
+				attemptId: operation.attemptId,
+			} satisfies EngineWireBodies['EngineRetry' | 'EngineDiscard'];
 		default:
 			return unreachableOperation(operation);
 	}
@@ -179,6 +264,44 @@ export function fleetAdminIntent(
 				target: organization,
 				operationId: null,
 				params: { after: operation.after, limit: operation.limit },
+			} satisfies OrganizationAdminIntent_Serialize;
+		// Central's `AdminOperation::intent` (admin_operations.rs:701-736 at 4593797b1): every
+		// engine intent targets the organization; only retry and discard carry an operation ID.
+		case 'EngineHealth':
+			return {
+				v: 1,
+				operation: operation.operation,
+				organization,
+				target: organization,
+				operationId: null,
+				params: {},
+			} satisfies OrganizationAdminIntent_Serialize;
+		case 'EngineListRetired':
+			return {
+				v: 1,
+				operation: operation.operation,
+				organization,
+				target: organization,
+				operationId: null,
+				params: { after: operation.after, limit: operation.limit },
+			} satisfies OrganizationAdminIntent_Serialize;
+		case 'EngineRetry':
+			return {
+				v: 1,
+				operation: operation.operation,
+				organization,
+				target: organization,
+				operationId: operation.operationId,
+				params: { attemptId: operation.attemptId },
+			} satisfies OrganizationAdminIntent_Serialize;
+		case 'EngineDiscard':
+			return {
+				v: 1,
+				operation: operation.operation,
+				organization,
+				target: organization,
+				operationId: operation.operationId,
+				params: { attemptId: operation.attemptId },
 			} satisfies OrganizationAdminIntent_Serialize;
 		default:
 			return unreachableOperation(operation);

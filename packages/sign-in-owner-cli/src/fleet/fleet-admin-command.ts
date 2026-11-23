@@ -22,7 +22,11 @@ const relayPaths = {
 	CreateWorkspace: '/api/auth/organization-admin/v1/create-workspace',
 	WorkspaceLookup: '/api/auth/organization-admin/v1/workspace-lookup',
 	ReadChangeRecords: '/api/auth/organization-admin/v1/change-records',
-} as const satisfies Partial<Record<FleetAdminRequest['operation'], string>>;
+	EngineHealth: '/api/auth/organization-admin/v1/engine-health',
+	EngineListRetired: '/api/auth/organization-admin/v1/engine-retired',
+	EngineRetry: '/api/auth/organization-admin/v1/engine-retry',
+	EngineDiscard: '/api/auth/organization-admin/v1/engine-discard',
+} as const satisfies Record<Exclude<FleetAdminRequest['operation'], 'ListWorkspaces'>, string>;
 
 /** A workspace as central's admin answers name it. */
 type FleetAdminWorkspace = Extract<FleetAdminResult, { readonly result: 'applied' }>['workspace'];
@@ -38,6 +42,11 @@ export type FleetAdminOutcome =
 	/** Central refused after the confirmation the person declined or could not give. */
 	| { readonly kind: 'not-confirmed' }
 	| { readonly kind: 'unauthenticated' }
+	/**
+	 * Sign-in answered 503 `central-unavailable`: central (or the link) gave no usable answer. Like
+	 * an unknown, it says nothing about whether a change applied; a repeat is safe.
+	 */
+	| { readonly kind: 'unavailable' }
 	/** No answer: the same command, with the same operation ID, is safe to repeat. */
 	| { readonly kind: 'unknown' };
 
@@ -45,6 +54,8 @@ export type FleetAdminOutcome =
 export type SignedRelayAnswer<TReply> =
 	| { readonly kind: 'answered'; readonly reply: TReply }
 	| { readonly kind: 'unauthenticated' }
+	/** The relay answered 503: central was unavailable. The outcome of a change is not known. */
+	| { readonly kind: 'unavailable' }
 	/** No readable answer: the same operation, with the same identifiers, is safe to repeat. */
 	| { readonly kind: 'unknown' };
 
@@ -85,6 +96,7 @@ export async function sendSignedRelayRequest<TReply>(props: {
 		return { kind: 'unknown' };
 	}
 	if (response.status === 401) return { kind: 'unauthenticated' };
+	if (response.status === 503) return { kind: 'unavailable' };
 	if (!response.ok) return { kind: 'unknown' };
 	const reply = props.readReply(await response.json().catch(() => null));
 	return reply === null ? { kind: 'unknown' } : { kind: 'answered', reply };

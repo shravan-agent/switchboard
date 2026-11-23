@@ -50,6 +50,29 @@ describe('organization roles on the native plugin statement', () => {
 		expect(fleetPermissionsForRole('member')).not.toContain('approval:decide');
 		expect(fleetPermissionsForRole('member')).not.toContain('organization:repairWork');
 	});
+
+	it('DEL-07: the engine routes need organization:readAudit and organization:repairWork, which only the owner holds', () => {
+		// Arrange: engine-admin-results.md at central 4593797b1. Health and retired need
+		// readAudit; retry and discard need repairWork. Both stay owner-only until the owner widens them.
+		const enginePermissions = [
+			{ statement: { organization: ['readAudit'] }, literal: 'organization:readAudit' },
+			{ statement: { organization: ['repairWork'] }, literal: 'organization:repairWork' },
+		] as const;
+		// Act
+		const grants = enginePermissions.map(({ statement }) => ({
+			owner: organizationRoles.owner.authorize(statement).success,
+			member: organizationRoles.member.authorize(statement).success,
+		}));
+		// Assert
+		expect(grants).toEqual([
+			{ owner: true, member: false },
+			{ owner: true, member: false },
+		]);
+		for (const { literal } of enginePermissions) {
+			expect(fleetPermissionsForRole('owner')).toContain(literal);
+			expect(fleetPermissionsForRole('member')).not.toContain(literal);
+		}
+	});
 });
 
 const user = {
