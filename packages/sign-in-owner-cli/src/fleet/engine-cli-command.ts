@@ -204,7 +204,7 @@ function unansweredWords(
 export async function runEngineCommand(props: {
 	readonly arguments: readonly string[];
 	readonly target: AuthTarget;
-	readonly options: Readonly<Record<string, unknown>> & EngineCommandOptions;
+	readonly options: EngineCommandOptions;
 	readonly environment: FleetCliEnvironment;
 }): Promise<number> {
 	const { environment } = props;

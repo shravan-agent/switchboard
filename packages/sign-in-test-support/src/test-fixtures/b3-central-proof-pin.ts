@@ -45,6 +45,16 @@ export const c3CentralProofPin = {
 	nativeSha256: 'a8ae59ac7ce508b7418d40854057f55232eccb3c97b757aa661c39635a7468cd',
 } as const satisfies CentralNativeProofPin;
 
+/**
+ * DEL-07's live engine administration proof: Central main 4593797b1 (#394, the signed engine
+ * administration route contracts), the locked production CLI debug build, signed for direct macOS
+ * execution.
+ */
+export const engineCentralProofPin = {
+	commit: '4593797b1c6a0dd03af6bbed6d8b00a0c4cc876f',
+	nativeSha256: 'b6a56bb7185a925d888d4e9ab88fb406e83852b5e5e9c33776d7bed9befde453',
+} as const satisfies CentralNativeProofPin;
+
 export async function assertB3CentralNativeProofArtifact(
 	executable: string,
 	pin: CentralNativeProofPin = b3CentralProofPin,

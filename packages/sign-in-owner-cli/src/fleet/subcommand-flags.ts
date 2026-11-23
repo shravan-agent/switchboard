@@ -27,8 +27,11 @@ export function unsupportedSubcommandFlagWords(props: {
 	return `${props.command} ${props.subcommand} does not take --${props.flag} (it ${takes}). Nothing was sent.`;
 }
 
-/** The flags a person actually supplied: every option with a value. */
-export function suppliedFlags(options: Readonly<Record<string, unknown>>): readonly string[] {
+/**
+ * The flags a person actually supplied: every option with a value. `options` may carry flags
+ * beyond its declared type; the parser hands over every one.
+ */
+export function suppliedFlags(options: object): readonly string[] {
 	return Object.entries(options)
 		.filter(([, value]) => value !== undefined)
 		.map(([flag]) => flag);

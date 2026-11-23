@@ -62,7 +62,7 @@ const page = (items: readonly object[], next: string | null) => (): Response =>
 async function engine(
 	args: readonly string[],
 	relayReplies: readonly (() => Response)[],
-	options: EngineCommandOptions & Readonly<Record<string, unknown>> = {},
+	options: EngineCommandOptions & { readonly all?: boolean } = {},
 	confirmSecondFactor: () => Promise<boolean> = async () => {
 		throw new Error('no step-up expected');
 	},
