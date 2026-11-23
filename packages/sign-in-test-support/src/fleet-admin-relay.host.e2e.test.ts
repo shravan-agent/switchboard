@@ -43,6 +43,10 @@ const relayPath = {
 	CreateWorkspace: '/api/auth/organization-admin/v1/create-workspace',
 	WorkspaceLookup: '/api/auth/organization-admin/v1/workspace-lookup',
 	ReadChangeRecords: '/api/auth/organization-admin/v1/change-records',
+	EngineHealth: '/api/auth/organization-admin/v1/engine-health',
+	EngineListRetired: '/api/auth/organization-admin/v1/engine-retired',
+	EngineRetry: '/api/auth/organization-admin/v1/engine-retry',
+	EngineDiscard: '/api/auth/organization-admin/v1/engine-discard',
 } as const;
 
 /** Central's proof for `signedFor`, as the CLI signs it; `htu` defaults to central's origin. */

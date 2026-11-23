@@ -12,9 +12,8 @@ import { z } from 'zod';
 
 import {
 	base64UrlSha256,
-	inRequestWindow,
+	centralApplyingFloorRefusal,
 	sortedJson,
-	uuid7Milliseconds,
 	verifyCentralPersonRequest,
 	type AdminVerificationFailure,
 	type CentralPersonVerifierSettings,
@@ -385,29 +384,12 @@ export function createControlledCentralApprovals(
 		const refused = (reason: string) =>
 			({ kind: 'refused', refusal: { result: 'refused', reason } }) as const;
 		const { claims, requestId } = verified;
-		const now = props.now();
-		if (now >= verified.effectiveExpiryMs) return refused('expired');
-		if (
-			!inRequestWindow(uuid7Milliseconds(requestId), now) ||
-			!inRequestWindow(verified.proofTimeMs, now)
-		)
-			return refused('requestTime');
-		const floors = props.readFloors(claims.organization_id, claims.sub);
-		const organization = floors.organization;
-		if (organization === null) return refused('authorizationSyncRequired');
-		if (organization.state === 'deleted') return refused('notPermitted');
-		if (claims.organization_revision > organization.revision)
-			return refused('authorizationSyncRequired');
-		if (organization.state === 'stopped') return refused('notPermitted');
-		if (claims.organization_revision < organization.revision) return refused('refreshRequired');
-		if (claims.permission_policy_digest !== organization.policyDigest)
-			return refused('refreshRequired');
-		const person = floors.person;
-		if (person === null) return refused('authorizationSyncRequired');
-		if (person.subjectId !== claims.authorization_subject_id) return refused('notPermitted');
-		if (claims.person_revision > person.revision) return refused('authorizationSyncRequired');
-		if (person.state === 'inactive') return refused('notPermitted');
-		if (claims.person_revision < person.revision) return refused('refreshRequired');
+		const floorRefusal = centralApplyingFloorRefusal({
+			now: props.now(),
+			floors: props.readFloors(claims.organization_id, claims.sub),
+			verified,
+		});
+		if (floorRefusal !== null) return refused(floorRefusal);
 		const reused = usedProofIds.has(requestId);
 		if (!claims.permissions.includes(approvalPermission))
 			return route === 'ApprovalDecide' && !reused

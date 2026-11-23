@@ -16,6 +16,10 @@ import {
 	approvalRouteByPath,
 	type ControlledCentralApprovals,
 } from '#sign-in-test-support/test-fixtures/controlled-central-approvals';
+import {
+	engineRouteByPath,
+	type ControlledCentralEngine,
+} from '#sign-in-test-support/test-fixtures/controlled-central-engine';
 
 /** The organization and person floors central admits a person request against. */
 export interface CentralHeldFloors {
@@ -121,6 +125,8 @@ export interface ControlledCentralProvisioning {
 	readonly attachAdmin: (admin: ControlledCentralAdmin) => void;
 	/** C3's approval routes' stand-in; until attached they answer 503, as an unconfigured central. */
 	readonly attachApprovals: (approvals: ControlledCentralApprovals) => void;
+	/** The engine routes' stand-in; until attached they answer 503, as an unconfigured central. */
+	readonly attachEngine: (engine: ControlledCentralEngine) => void;
 	readonly fetch: (request: Request) => Promise<Response>;
 }
 
@@ -147,6 +153,7 @@ export function createControlledCentralProvisioning(
 	const pushWaiters: { readonly count: number; readonly resolve: () => void }[] = [];
 	let admin: ControlledCentralAdmin | null = null;
 	let approvals: ControlledCentralApprovals | null = null;
+	let engine: ControlledCentralEngine | null = null;
 	let heldCount = 0;
 	let applySetup = true;
 	let refuseUnstamped = false;
@@ -268,12 +275,16 @@ export function createControlledCentralProvisioning(
 		attachApprovals: (attached: ControlledCentralApprovals): void => {
 			approvals = attached;
 		},
+		attachEngine: (attached: ControlledCentralEngine): void => {
+			engine = attached;
+		},
 		async fetch(request: Request): Promise<Response> {
 			// Count before dispatch, body parsing or authorization rejection. Unknown paths
 			// and methods are classified rather than retaining arbitrary request values.
 			const pathname = new URL(request.url).pathname;
 			const adminRoute = adminRouteByPath[pathname];
 			const approvalRoute = approvalRouteByPath[pathname];
+			const engineRoute = engineRouteByPath[pathname];
 			const route =
 				pathname === '/internal/organization-provisioning' ||
 				pathname === '/internal/organization-statement-digest' ||
@@ -286,7 +297,9 @@ export function createControlledCentralProvisioning(
 						? fleetAdminRoutePaths[adminRoute]
 						: approvalRoute !== undefined
 							? approvalPersonRoutePaths[approvalRoute]
-							: 'other';
+							: engineRoute !== undefined
+								? fleetAdminRoutePaths[engineRoute]
+								: 'other';
 			arrivals.push({
 				method: request.method === 'POST' ? 'POST' : 'other',
 				path: route,
@@ -321,7 +334,7 @@ export function createControlledCentralProvisioning(
 					return new Response(null, { status: 503 });
 				}
 			}
-			if (adminRoute !== undefined && refuseUnstamped) {
+			if ((adminRoute !== undefined || engineRoute !== undefined) && refuseUnstamped) {
 				const named: unknown = await request
 					.clone()
 					.json()
@@ -340,6 +353,10 @@ export function createControlledCentralProvisioning(
 				return approvals === null
 					? new Response(null, { status: 503 })
 					: approvals.fetch(request, approvalRoute);
+			if (engineRoute !== undefined)
+				return engine === null
+					? new Response(null, { status: 503 })
+					: engine.fetch(request, engineRoute);
 			if (request.headers.has('authorization')) return new Response(null, { status: 400 });
 			const acceptedRoute: ControlledCentralRoute = route;
 			const requestBody = await request.text();

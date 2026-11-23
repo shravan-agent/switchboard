@@ -54,6 +54,10 @@ import {
 	type ControlledCentralApprovals,
 } from '#sign-in-test-support/test-fixtures/controlled-central-approvals';
 import {
+	createControlledCentralEngine,
+	type ControlledCentralEngine,
+} from '#sign-in-test-support/test-fixtures/controlled-central-engine';
+import {
 	createControlledCentralProvisioning,
 	type ControlledCentralProvisioning,
 } from '#sign-in-test-support/test-fixtures/controlled-central-provisioning';
@@ -216,6 +220,8 @@ export async function startLocalAuthHarness(
 		readonly centralAdmin: ControlledCentralAdmin;
 		/** C3's approval routes' named stand-in for central, on the same clock as the admin one. */
 		readonly centralApprovals: ControlledCentralApprovals;
+		/** The engine administration routes' named stand-in for central, on the same clock. */
+		readonly centralEngine: ControlledCentralEngine;
 		readonly setCentralAdminTime: (milliseconds: number) => void;
 		/** The production key-change re-sign (B2 rule 6) on either host; renewal itself has no
 		 * trigger, it runs inside each real Fleet call (owner, 9 Nov). */
@@ -913,6 +919,18 @@ export async function startLocalAuthHarness(
 		readFloors: centralProvisioning.readFloors,
 	});
 	centralProvisioning.attachApprovals(centralApprovals);
+	const centralEngine = createControlledCentralEngine({
+		issuer,
+		audience: configuration.centralAdminAudience,
+		publicOrigin: configuration.centralPublicOrigin,
+		readSigningKeys: async () =>
+			z
+				.object({ keys: z.array(z.looseObject({ kty: z.string() })) })
+				.parse(await (await auth('/api/auth/jwks')).json()),
+		now: () => centralAdminTime,
+		readFloors: centralProvisioning.readFloors,
+	});
+	centralProvisioning.attachEngine(centralEngine);
 	const proofClose = createLocalAuthProofClose({
 		runtime: miniflare,
 		nodeHost,
@@ -943,6 +961,7 @@ export async function startLocalAuthHarness(
 		centralProvisioning,
 		centralAdmin,
 		centralApprovals,
+		centralEngine,
 		setCentralAdminTime: (milliseconds: number): void => {
 			centralAdminTime = milliseconds;
 		},

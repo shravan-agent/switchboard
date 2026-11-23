@@ -19,6 +19,8 @@ import {
 } from 'jose';
 import { z } from 'zod';
 
+import type { CentralHeldFloors } from '#sign-in-test-support/test-fixtures/controlled-central-provisioning';
+
 /**
  * The named stand-in for central's admin routes until B2e joins
  * the real link. It checks floor presence and the predicates it implements below, taken from
@@ -219,14 +221,17 @@ function independentIntent(request: FleetAdminRequest): string {
 						operationId: null,
 						params: {},
 					}
-				: {
-						v: 1,
-						operation: 'ReadChangeRecords',
-						organization,
-						target: organization,
-						operationId: null,
-						params: { after: request.after, limit: request.limit },
-					};
+				: request.operation === 'ReadChangeRecords'
+					? {
+							v: 1,
+							operation: 'ReadChangeRecords',
+							organization,
+							target: organization,
+							operationId: null,
+							params: { after: request.after, limit: request.limit },
+						}
+					: // Engine routes are controlled-central-engine.ts's; no admin intent matches them.
+						{ notAnAdminRoute: request.operation };
 	return base64UrlSha256(sortedJson(intent));
 }
 export function uuid7Milliseconds(id: string): number {
@@ -361,6 +366,49 @@ export async function verifyCentralPersonRequest(
 		proofTimeMs: proofClaims.iat * 1000,
 		facts,
 	};
+}
+
+/**
+ * Central's applying admission shared by every person route, at one applying sample `now`
+ * (fleet-signin/src/person_proof/admission.rs at 1ede5c1b9 and 4593797b1; the order is
+ * collaboration-central-core/src/person_admission_plans.rs:25-61 at 4593797b1): the effective
+ * expiry and the request window (admission.rs:189-202), the organization floor (:204-240), then
+ * the person floor (:156-173). Null when all pass; each route checks its permission after this.
+ * Central's reject-through watermark is not modelled by the provisioning peer.
+ */
+export function centralApplyingFloorRefusal(props: {
+	readonly now: number;
+	readonly floors: CentralHeldFloors;
+	readonly verified: Extract<CentralPersonVerification, { readonly kind: 'verified' }>;
+}):
+	| 'expired'
+	| 'requestTime'
+	| 'authorizationSyncRequired'
+	| 'notPermitted'
+	| 'refreshRequired'
+	| null {
+	const { now, floors, verified } = props;
+	const { claims } = verified;
+	if (now >= verified.effectiveExpiryMs) return 'expired';
+	if (
+		!inRequestWindow(uuid7Milliseconds(verified.requestId), now) ||
+		!inRequestWindow(verified.proofTimeMs, now)
+	)
+		return 'requestTime';
+	const organization = floors.organization;
+	if (organization === null) return 'authorizationSyncRequired';
+	if (organization.state === 'deleted') return 'notPermitted';
+	if (claims.organization_revision > organization.revision) return 'authorizationSyncRequired';
+	if (organization.state === 'stopped') return 'notPermitted';
+	if (claims.organization_revision < organization.revision) return 'refreshRequired';
+	if (claims.permission_policy_digest !== organization.policyDigest) return 'refreshRequired';
+	const person = floors.person;
+	if (person === null) return 'authorizationSyncRequired';
+	if (person.subjectId !== claims.authorization_subject_id) return 'notPermitted';
+	if (claims.person_revision > person.revision) return 'authorizationSyncRequired';
+	if (person.state === 'inactive') return 'notPermitted';
+	if (claims.person_revision < person.revision) return 'refreshRequired';
+	return null;
 }
 
 export function createControlledCentralAdmin(props: {
