@@ -351,8 +351,16 @@ export async function runEngineCommand(props: {
 		case 'refused':
 			environment.write(engineRefusalWords(subcommand, reply.reason, attemptId));
 			return 2;
-		default:
+		// Not a change's result: the route's own schema never admits one, so it reads as no answer.
+		case 'applied':
+		case 'found':
+		case 'records':
+		case 'workspaces':
+		case 'engineHealth':
+		case 'engineRetired':
 			environment.write(`Central did not answer. Repeat with: ${repeat}; it will not apply twice.`);
 			return 1;
+		default:
+			return reply satisfies never;
 	}
 }

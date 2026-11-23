@@ -4,6 +4,7 @@ import {
 	engineKindNames,
 	fleetAdminRequestSchema,
 	fleetAdminRoutePaths,
+	isEngineAdminOperation,
 	type EngineAdminOperationName,
 	type EngineAdminResultFor,
 	type FleetAdminRequest,
@@ -41,6 +42,11 @@ export const engineRouteByPath: Readonly<Record<string, EngineAdminOperationName
 };
 
 type EngineKindName = (typeof engineKindNames)[number];
+/** A request on one of the four engine routes. */
+type EngineRequest = Extract<FleetAdminRequest, { readonly operation: EngineAdminOperationName }>;
+function isEngineRequest(request: FleetAdminRequest): request is EngineRequest {
+	return isEngineAdminOperation(request.operation);
+}
 type FailureClass = Extract<
 	EngineAdminResultFor<'EngineListRetired'>,
 	{ readonly result: 'engineRetired' }
@@ -133,7 +139,7 @@ const receiptWindowMillis = 86_400_000;
 const finishableKinds: readonly EngineKindName[] = ['wake_timer', 'automation_timer'];
 
 /** Central's `AdminOperation::intent` for the engine routes (ops:701-736), restated apart from sign-in's builder. */
-function independentEngineIntent(request: FleetAdminRequest): string {
+function independentEngineIntent(request: EngineRequest): string {
 	const organization = request.organizationId;
 	const frame = { v: 1, operation: request.operation, organization, target: organization };
 	switch (request.operation) {
@@ -157,7 +163,7 @@ function independentEngineIntent(request: FleetAdminRequest): string {
 				}),
 			);
 		default:
-			return base64UrlSha256(sortedJson({ notAnEngineOperation: request.operation }));
+			return request satisfies never;
 	}
 }
 
@@ -386,7 +392,7 @@ export function createControlledCentralEngine(
 			// sign-in's closed schema: central also accepts any UUID form for `attemptId` and
 			// `after`, and an absent `after`; sign-in never sends those.
 			// Set by the intent step once the proof checks pass; a holder, so the type stays open.
-			const decodedBody: { value: FleetAdminRequest | null } = { value: null };
+			const decodedBody: { value: EngineRequest | null } = { value: null };
 			const verified = await verifyCentralPersonRequest(props, request, {
 				path: fleetAdminRoutePaths[route],
 				organization: address.data.organizationId,
@@ -395,7 +401,7 @@ export function createControlledCentralEngine(
 						...z.looseObject({}).catch({}).parse(decoded),
 						operation: route,
 					});
-					if (!parsed.success) return null;
+					if (!parsed.success || !isEngineRequest(parsed.data)) return null;
 					decodedBody.value = parsed.data;
 					return independentEngineIntent(parsed.data);
 				},
@@ -403,7 +409,7 @@ export function createControlledCentralEngine(
 			const body = decodedBody.value;
 			if (verified.kind === 'refused' || body === null)
 				return unauthenticated(verified.kind === 'refused' ? verified.failure : 'operation-body');
-			const admitted: FleetAdminRequest = body;
+			const admitted: EngineRequest = body;
 			const { claims } = verified;
 			const operationId =
 				admitted.operation === 'EngineRetry' || admitted.operation === 'EngineDiscard'
@@ -476,8 +482,7 @@ export function createControlledCentralEngine(
 					return reply(bytesOut, false);
 				}
 				default:
-					arrivals.push({ route, outcome: { kind: 'bad-request' }, ...facts });
-					return new Response(null, { status: 400 });
+					return admitted satisfies never;
 			}
 		},
 	};

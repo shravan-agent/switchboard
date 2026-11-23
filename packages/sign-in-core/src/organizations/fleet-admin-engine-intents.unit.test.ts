@@ -62,9 +62,10 @@ describe("central's engine intent vectors", (): void => {
 	);
 
 	it('covers every engine operation exactly once', (): void => {
-		expect(intentVectors.map((vector) => operationByPath.get(vector.path)).toSorted()).toEqual(
-			[...engineAdminOperationNames].toSorted(),
-		);
+		const byName = (left: string, right: string): number => left.localeCompare(right);
+		expect(
+			intentVectors.map((vector) => operationByPath.get(vector.path) ?? 'unknown').toSorted(byName),
+		).toEqual([...engineAdminOperationNames].toSorted(byName));
 	});
 });
 

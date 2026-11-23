@@ -536,6 +536,11 @@ export function createControlledCentralAdmin(props: {
 					body.after === null ? 0 : records.findIndex((record) => record.id === body.after) + 1;
 				return { result: 'records', records: records.slice(start, start + body.limit) };
 			}
+			case 'EngineHealth':
+			case 'EngineListRetired':
+			case 'EngineRetry':
+			case 'EngineDiscard':
+				throw new Error('The engine routes have their own stand-in (controlled-central-engine.ts)');
 			default:
 				throw new Error('Unknown admin route');
 		}
