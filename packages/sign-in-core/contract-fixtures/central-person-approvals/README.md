@@ -4,7 +4,7 @@ Consumer copies from codex-router `main` `1ede5c1b9afbe6bd427ac742f8b63d53a22515
 
 | File | Central commit | SHA-256 |
 |---|---|---|
-| `central-sign-in.ts` (vendored as `src/central-link/generated/central-sign-in.gen.ts`) | `24dfd348` | `1b353b3c3af466421d932014e0bf013e3327c7f27f4274e1b8dda0d1b018a3c7` |
+| `central-sign-in.ts` (vendored as `src/central-link/generated/central-sign-in.gen.ts`) | `24dfd348`; since DEL-07, central main `4593797b1` (see `central-sign-in-provenance.ts`; the only change is that `engineRetired.next` is required and nullable) | `1b353b3c3af466421d932014e0bf013e3327c7f27f4274e1b8dda0d1b018a3c7` at `24dfd348` |
 | `contracts/approval-intent-vector.json` | `24dfd348` (unchanged since `8670195`) | `7cd5f18f05dd95c8a7d5fd098614f732448cd25c2a54d17949fc5e4180454ae7` |
 | `contracts/approval-person-reply-vectors.json` | `24dfd348` | `5a9bec2fa13bc599c02a544e4557d6a70eeb5c838806da14c49687ad6f819c79` |
 | `approval_person_wire.rs` | `8670195` | `4e2f47c3145171d34bf7b3008df3bf2fad3f0be7157bc475d7a12d01febd3577` |

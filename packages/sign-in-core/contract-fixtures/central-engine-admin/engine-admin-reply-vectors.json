@@ -1,0 +1,102 @@
+[
+	{
+		"name": "health_seconds",
+		"bytes": "{\"result\":\"engineHealth\",\"kinds\":[{\"kind\":\"wake_timer\",\"failing\":0,\"retired\":1,\"oldestFirstFailedAt\":\"2026-11-23T08:00:01Z\",\"lastFailure\":\"statement_rejected\"},{\"kind\":\"automation_timer\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"direct_message\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"system_message_expiry\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"legacy_notice_windows\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"legacy_workspace_drains\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"engine_source\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null}],\"alarm\":\"2026-11-23T08:10:03Z\",\"alarmMissing\":false}"
+	},
+	{
+		"name": "retired_seconds",
+		"bytes": "{\"result\":\"engineRetired\",\"items\":[{\"attemptId\":\"019f0000-0000-7000-8000-000000000101\",\"kind\":\"wake_timer\",\"subjectKey\":\"019f0000-0000-7000-8000-000000000102\",\"failureClass\":\"statement_rejected\",\"count\":2,\"retiredAt\":\"2026-11-23T08:05:02Z\",\"lastFailure\":null}],\"next\":null}"
+	},
+	{
+		"name": "health_millis",
+		"bytes": "{\"result\":\"engineHealth\",\"kinds\":[{\"kind\":\"wake_timer\",\"failing\":0,\"retired\":1,\"oldestFirstFailedAt\":\"2026-11-23T08:00:01.123Z\",\"lastFailure\":\"statement_rejected\"},{\"kind\":\"automation_timer\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"direct_message\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"system_message_expiry\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"legacy_notice_windows\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"legacy_workspace_drains\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"engine_source\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null}],\"alarm\":\"2026-11-23T08:10:03.456Z\",\"alarmMissing\":false}"
+	},
+	{
+		"name": "retired_millis",
+		"bytes": "{\"result\":\"engineRetired\",\"items\":[{\"attemptId\":\"019f0000-0000-7000-8000-000000000101\",\"kind\":\"wake_timer\",\"subjectKey\":\"019f0000-0000-7000-8000-000000000102\",\"failureClass\":\"statement_rejected\",\"count\":2,\"retiredAt\":\"2026-11-23T08:05:02.123Z\",\"lastFailure\":null}],\"next\":null}"
+	},
+	{
+		"name": "health_micros",
+		"bytes": "{\"result\":\"engineHealth\",\"kinds\":[{\"kind\":\"wake_timer\",\"failing\":0,\"retired\":1,\"oldestFirstFailedAt\":\"2026-11-23T08:00:01.123456Z\",\"lastFailure\":\"statement_rejected\"},{\"kind\":\"automation_timer\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"direct_message\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"system_message_expiry\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"legacy_notice_windows\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"legacy_workspace_drains\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"engine_source\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null}],\"alarm\":null,\"alarmMissing\":false}"
+	},
+	{
+		"name": "retired_micros",
+		"bytes": "{\"result\":\"engineRetired\",\"items\":[{\"attemptId\":\"019f0000-0000-7000-8000-000000000101\",\"kind\":\"wake_timer\",\"subjectKey\":\"019f0000-0000-7000-8000-000000000102\",\"failureClass\":\"statement_rejected\",\"count\":2,\"retiredAt\":\"2026-11-23T08:05:02.123456Z\",\"lastFailure\":null}],\"next\":null}"
+	},
+	{
+		"name": "health_nanos",
+		"bytes": "{\"result\":\"engineHealth\",\"kinds\":[{\"kind\":\"wake_timer\",\"failing\":0,\"retired\":1,\"oldestFirstFailedAt\":\"2026-11-23T08:00:01.123456789Z\",\"lastFailure\":\"statement_rejected\"},{\"kind\":\"automation_timer\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"direct_message\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"system_message_expiry\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"legacy_notice_windows\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"legacy_workspace_drains\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null},{\"kind\":\"engine_source\",\"failing\":0,\"retired\":0,\"oldestFirstFailedAt\":null,\"lastFailure\":null}],\"alarm\":null,\"alarmMissing\":false}"
+	},
+	{
+		"name": "retired_nanos",
+		"bytes": "{\"result\":\"engineRetired\",\"items\":[{\"attemptId\":\"019f0000-0000-7000-8000-000000000101\",\"kind\":\"wake_timer\",\"subjectKey\":\"019f0000-0000-7000-8000-000000000102\",\"failureClass\":\"statement_rejected\",\"count\":2,\"retiredAt\":\"2026-11-23T08:05:02.123456789Z\",\"lastFailure\":null}],\"next\":null}"
+	},
+	{
+		"name": "retired_empty_continuation",
+		"bytes": "{\"result\":\"engineRetired\",\"items\":[],\"next\":\"019f0000-0000-7000-8000-000000000101\"}"
+	},
+	{
+		"name": "retired_empty_end",
+		"bytes": "{\"result\":\"engineRetired\",\"items\":[],\"next\":null}"
+	},
+	{
+		"name": "retried",
+		"bytes": "{\"result\":\"engineRetried\"}"
+	},
+	{
+		"name": "discarded",
+		"bytes": "{\"result\":\"engineDiscarded\"}"
+	},
+	{
+		"name": "notPermitted",
+		"bytes": "{\"result\":\"refused\",\"reason\":\"notPermitted\"}"
+	},
+	{
+		"name": "secondFactorRequired",
+		"bytes": "{\"result\":\"refused\",\"reason\":\"secondFactorRequired\"}"
+	},
+	{
+		"name": "refreshRequired",
+		"bytes": "{\"result\":\"refused\",\"reason\":\"refreshRequired\"}"
+	},
+	{
+		"name": "authorizationSyncRequired",
+		"bytes": "{\"result\":\"refused\",\"reason\":\"authorizationSyncRequired\"}"
+	},
+	{
+		"name": "expired",
+		"bytes": "{\"result\":\"refused\",\"reason\":\"expired\"}"
+	},
+	{
+		"name": "requestTime",
+		"bytes": "{\"result\":\"refused\",\"reason\":\"requestTime\"}"
+	},
+	{
+		"name": "requestReused",
+		"bytes": "{\"result\":\"refused\",\"reason\":\"requestReused\"}"
+	},
+	{
+		"name": "conflict",
+		"bytes": "{\"result\":\"refused\",\"reason\":\"conflict\"}"
+	},
+	{
+		"name": "notFound",
+		"bytes": "{\"result\":\"refused\",\"reason\":\"notFound\"}"
+	},
+	{
+		"name": "notRetired",
+		"bytes": "{\"result\":\"refused\",\"reason\":\"notRetired\"}"
+	},
+	{
+		"name": "discardUnsupported",
+		"bytes": "{\"result\":\"refused\",\"reason\":\"discardUnsupported\"}"
+	},
+	{
+		"name": "stale",
+		"bytes": "{\"result\":\"refused\",\"reason\":\"stale\"}"
+	},
+	{
+		"name": "subjectUnreadable",
+		"bytes": "{\"result\":\"refused\",\"reason\":\"subjectUnreadable\"}"
+	}
+]

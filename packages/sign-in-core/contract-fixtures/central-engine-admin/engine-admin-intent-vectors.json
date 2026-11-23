@@ -1,0 +1,40 @@
+[
+	{
+		"path": "/organization-admin/v1/engine-health",
+		"requestBody": {
+			"organizationId": "019f0000-0000-7000-8000-00000000d201"
+		},
+		"canonicalIntent": "{\"operation\":\"EngineHealth\",\"operationId\":null,\"organization\":\"019f0000-0000-7000-8000-00000000d201\",\"params\":{},\"target\":\"019f0000-0000-7000-8000-00000000d201\",\"v\":1}",
+		"intentSha256Base64Url": "nLeoZLhS8CIFgy0_d_pLvws4tzBu9jXYnzcTeY1ZVGI"
+	},
+	{
+		"path": "/organization-admin/v1/engine-retired",
+		"requestBody": {
+			"organizationId": "019f0000-0000-7000-8000-00000000d201",
+			"after": "019f0000-0000-7000-8000-000000000101",
+			"limit": 25
+		},
+		"canonicalIntent": "{\"operation\":\"EngineListRetired\",\"operationId\":null,\"organization\":\"019f0000-0000-7000-8000-00000000d201\",\"params\":{\"after\":\"019f0000-0000-7000-8000-000000000101\",\"limit\":25},\"target\":\"019f0000-0000-7000-8000-00000000d201\",\"v\":1}",
+		"intentSha256Base64Url": "6g05uTj_pfJtvL5jrBLKK1GdAC2uiEHqw_1_DuHh95k"
+	},
+	{
+		"path": "/organization-admin/v1/engine-retry",
+		"requestBody": {
+			"organizationId": "019f0000-0000-7000-8000-00000000d201",
+			"operationId": "019f0000-0000-7000-8000-000000000100",
+			"attemptId": "019f0000-0000-7000-8000-000000000101"
+		},
+		"canonicalIntent": "{\"operation\":\"EngineRetry\",\"operationId\":\"019f0000-0000-7000-8000-000000000100\",\"organization\":\"019f0000-0000-7000-8000-00000000d201\",\"params\":{\"attemptId\":\"019f0000-0000-7000-8000-000000000101\"},\"target\":\"019f0000-0000-7000-8000-00000000d201\",\"v\":1}",
+		"intentSha256Base64Url": "aw8UGZMa7nUAk7hQ_ilTM8QR1PNy1QI81ytklaISrgs"
+	},
+	{
+		"path": "/organization-admin/v1/engine-discard",
+		"requestBody": {
+			"organizationId": "019f0000-0000-7000-8000-00000000d201",
+			"operationId": "019f0000-0000-7000-8000-000000000100",
+			"attemptId": "019f0000-0000-7000-8000-000000000101"
+		},
+		"canonicalIntent": "{\"operation\":\"EngineDiscard\",\"operationId\":\"019f0000-0000-7000-8000-000000000100\",\"organization\":\"019f0000-0000-7000-8000-00000000d201\",\"params\":{\"attemptId\":\"019f0000-0000-7000-8000-000000000101\"},\"target\":\"019f0000-0000-7000-8000-00000000d201\",\"v\":1}",
+		"intentSha256Base64Url": "4Cq70ufDX5qwv32XW3-N5imNLQYRlPq-8jqTJZpQo9Q"
+	}
+]
