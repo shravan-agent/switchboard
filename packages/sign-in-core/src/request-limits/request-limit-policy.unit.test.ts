@@ -25,6 +25,10 @@ it.each([
 	['/api/auth/organization-admin/v1/approval-list', 'other', 100, 10],
 	['/api/auth/organization-admin/v1/approval-read', 'other', 100, 10],
 	['/api/auth/organization-admin/v1/approval-decide', 'other', 100, 10],
+	['/api/auth/organization-admin/v1/engine-health', 'other', 100, 10],
+	['/api/auth/organization-admin/v1/engine-retired', 'other', 100, 10],
+	['/api/auth/organization-admin/v1/engine-retry', 'other', 100, 10],
+	['/api/auth/organization-admin/v1/engine-discard', 'other', 100, 10],
 	['/unoffered', 'other', 100, 10],
 ] as const)(
 	'R52 classifies %s and assigns its independent native rule',

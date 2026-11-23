@@ -202,6 +202,32 @@ const reachableRouteGroups: readonly ReachableRouteGroup[] = [
 		evidence:
 			'F1: unauthenticated admission only (signed baselines are the follow-up PR). Signed: fleet-admin-relay.ts; approval-person-relay.host.e2e.test.ts; b3-central-approvals.host.e2e.test.ts',
 	},
+	// COVERAGE GAP (DEL-07, labelled as PR #24's approval rows): F1 covers these four routes as
+	// UNAUTHENTICATED ADMISSION ONLY. The campaign attaches the caller's cookie and no DPoP token or
+	// proof, so every generated request stops at the relay's early refusal (cookie, method, missing
+	// DPoP, size) and never reaches a signed request, central's reply decoding or the refusals
+	// behind the relay. Signed baselines are a separate PR. Signed behaviour is covered outside F1,
+	// in the host files named in this row's evidence.
+	{
+		method: 'POST',
+		paths: [
+			'/api/auth/organization-admin/v1/engine-health',
+			'/api/auth/organization-admin/v1/engine-retired',
+			'/api/auth/organization-admin/v1/engine-retry',
+			'/api/auth/organization-admin/v1/engine-discard',
+		],
+		exposure: ['cli'],
+		requestParts: ['json'],
+		// S2's no-5xx rule: engine replies and typed refusals arrive at 200 (engine-admin-results.md).
+		// Central's empty 503 is a classified server answer, relayed as `central-unavailable`, never
+		// a crash; F1's controlled central is always available, so it is not a documented answer here.
+		documentedAnswers: [200, 400, 401, 403, 413, 429],
+		disclosure:
+			'Only the authorized organization’s engine health and retired work; no credential in refusal.',
+		permittedRefusalEffects: ['none'],
+		evidence:
+			'F1: unauthenticated admission only (signed baselines are a separate PR). Signed: fleet-admin-relay.ts; engine-admin-relay.host.e2e.test.ts; b3-central-engine-admin.host.e2e.test.ts',
+	},
 	{
 		method: 'POST',
 		paths: [

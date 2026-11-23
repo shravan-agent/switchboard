@@ -18,6 +18,12 @@ export const fleetAdminRelayRoutes = {
 	'/api/auth/organization-admin/v1/create-workspace': 'CreateWorkspace',
 	'/api/auth/organization-admin/v1/workspace-lookup': 'WorkspaceLookup',
 	'/api/auth/organization-admin/v1/change-records': 'ReadChangeRecords',
+	// DEL-07: central's engine administration (4593797b1). An empty 503 from central comes back as
+	// the relay's classified `central-unavailable`.
+	'/api/auth/organization-admin/v1/engine-health': 'EngineHealth',
+	'/api/auth/organization-admin/v1/engine-retired': 'EngineListRetired',
+	'/api/auth/organization-admin/v1/engine-retry': 'EngineRetry',
+	'/api/auth/organization-admin/v1/engine-discard': 'EngineDiscard',
 } as const satisfies Record<string, FleetAdminRequest['operation']>;
 export type FleetAdminRelayRoute = keyof typeof fleetAdminRelayRoutes;
 

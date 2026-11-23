@@ -92,6 +92,10 @@ export function isPublicSignInRoute(
 		'/api/auth/organization-admin/v1/approval-list', // DPoP-only CLI relay (C3); central verifies.
 		'/api/auth/organization-admin/v1/approval-read', // DPoP-only CLI relay (C3); central verifies.
 		'/api/auth/organization-admin/v1/approval-decide', // DPoP-only CLI relay (C3); central verifies.
+		'/api/auth/organization-admin/v1/engine-health', // DPoP-only CLI relay (DEL-07); central verifies.
+		'/api/auth/organization-admin/v1/engine-retired', // DPoP-only CLI relay (DEL-07); central verifies.
+		'/api/auth/organization-admin/v1/engine-retry', // DPoP-only CLI relay (DEL-07); central verifies.
+		'/api/auth/organization-admin/v1/engine-discard', // DPoP-only CLI relay (DEL-07); central verifies.
 		'/api/auth/owner/bootstrap', // Audited cookie-only bootstrap uses the in-process provider API.
 		'/api/auth/sign-in/social', // Starts configured Google/GitHub provider sign-in.
 		'/api/auth/callback/google', // Receives the configured Google OAuth callback.
