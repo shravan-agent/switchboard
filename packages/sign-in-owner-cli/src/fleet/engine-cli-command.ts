@@ -18,6 +18,7 @@ import {
 	unsupportedSubcommandFlag,
 	unsupportedSubcommandFlagWords,
 } from '#sign-in-owner-cli/fleet/subcommand-flags';
+import { ownerCliEntrypoint, shellWord } from '#sign-in-owner-cli/owner-cli-entrypoint';
 
 export const engineCommandName = 'engine';
 
@@ -110,10 +111,21 @@ export function engineRefusalWords(
 			return `Stale: attempt ${attempt}'s subject moved or is gone; nothing changed.`;
 		case 'subjectUnreadable':
 			return `Attempt ${attempt}'s subject could not be read; nothing changed.`;
+		// engine-admin-results.md: discard's conflict is either an applying authorization guard that
+		// missed or an operation id held by another intent or actor; retry's guard miss is notFound,
+		// so its conflict is only the operation id. Neither writes to the attempt or its subject.
 		case 'conflict':
-			return subcommand === 'retry' || subcommand === 'discard'
-				? 'This operation id was already used for a different request; nothing changed.'
-				: 'Central saw its authorization change during the request; nothing was read. Repeat the command.';
+			switch (subcommand) {
+				case 'discard':
+					return 'Central answered conflict: either the authorization it admitted this discard under changed while applying it, or this operation id is already held by another request or person. Nothing was written to the attempt or its subject.';
+				case 'retry':
+					return 'Central answered conflict: this operation id is already held by another request or person. Nothing was written to the attempt or its subject.';
+				case 'health':
+				case 'retired':
+					return 'Central saw its authorization change during the request; nothing was read. Repeat the command.';
+				default:
+					return subcommand satisfies never;
+			}
 		case 'refreshRequired':
 		case 'authorizationSyncRequired':
 		case 'expired':
@@ -172,26 +184,71 @@ export async function walkRetiredPages(props: {
 	}
 }
 
-function unansweredWords(
-	subcommand: EngineSubcommand,
+/** A read (health or retired) with no readable answer: nothing was read; repeat it. */
+function readUnansweredWords(
 	outcome: Exclude<FleetAdminOutcome, { readonly kind: 'answered' }>,
 	repeat: string,
 ): string {
-	const change = subcommand === 'retry' || subcommand === 'discard';
 	switch (outcome.kind) {
 		case 'unauthenticated':
 			return credentialRefused;
 		case 'not-confirmed':
-			return `Not confirmed; the ${subcommand} was not sent again. Nothing changed.`;
+			return 'Not confirmed; nothing was read.';
 		case 'unavailable':
-			return change
-				? `Central is unavailable; this ${subcommand} may or may not have applied. Repeat with: ${repeat}; it will not apply twice.`
-				: `Central is unavailable; nothing was read. Repeat with: ${repeat}.`;
+			return `Central is unavailable; nothing was read. Repeat with: ${repeat}.`;
 		case 'unknown':
 		case 'created-earlier':
-			return change
-				? `Central did not answer. Repeat with: ${repeat}; it will not apply twice.`
-				: `Central did not answer. Repeat with: ${repeat}.`;
+			return `Central did not answer. Repeat with: ${repeat}.`;
+		default:
+			return outcome satisfies never;
+	}
+}
+
+type RepairSubcommand = Extract<EngineSubcommand, 'retry' | 'discard'>;
+
+/**
+ * The exact, runnable command that repeats this retry or discard: the documented entrypoint, the
+ * `--target` in use, then the same attempt and operation ID. Every value is one quoted shell word.
+ */
+export function repairRepeatCommand(props: {
+	readonly targetPath: string;
+	readonly subcommand: RepairSubcommand;
+	readonly attemptId: string;
+	readonly operationId: string;
+}): string {
+	return [
+		ownerCliEntrypoint,
+		'--target',
+		shellWord(props.targetPath),
+		engineCommandName,
+		props.subcommand,
+		shellWord(props.attemptId),
+		'--operation-id',
+		shellWord(props.operationId),
+	].join(' ');
+}
+
+/**
+ * A retry or discard with no readable answer: why, naming central's 24-hour receipt limit, then
+ * the repeat command alone on a line of its own, so copying the line gives exactly the command.
+ */
+function repairUnansweredLines(
+	subcommand: RepairSubcommand,
+	outcome: Exclude<FleetAdminOutcome, { readonly kind: 'answered' }>,
+	repeatLine: string,
+): readonly string[] {
+	switch (outcome.kind) {
+		case 'unauthenticated':
+			return [credentialRefused];
+		case 'not-confirmed':
+			return [`Not confirmed; the ${subcommand} was not sent again. Nothing changed.`];
+		case 'unavailable':
+		case 'unknown':
+		case 'created-earlier':
+			return [
+				`${outcome.kind === 'unavailable' ? 'Central is unavailable' : 'Central did not answer'}; this ${subcommand} may or may not have applied. To repeat, run the next line exactly. It sends the same ${subcommand} under the same operation id; within central's 24-hour receipt limit it will not apply twice, and after that central treats the same id as a new request.`,
+				repeatLine,
+			];
 		default:
 			return outcome satisfies never;
 	}
@@ -203,6 +260,8 @@ function unansweredWords(
  */
 export async function runEngineCommand(props: {
 	readonly arguments: readonly string[];
+	/** The `--target` file as given: a printed repeat command names it again. */
+	readonly targetPath: string;
 	readonly target: AuthTarget;
 	readonly options: EngineCommandOptions;
 	readonly environment: FleetCliEnvironment;
@@ -265,7 +324,7 @@ export async function runEngineCommand(props: {
 			fleetAdminRequestSchema.parse({ operation: 'EngineHealth', organizationId }),
 		);
 		if (outcome.kind !== 'answered') {
-			environment.write(unansweredWords(subcommand, outcome, 'engine health'));
+			environment.write(readUnansweredWords(outcome, 'engine health'));
 			return outcome.kind === 'not-confirmed' ? 2 : 1;
 		}
 		const reply = outcome.result;
@@ -306,8 +365,7 @@ export async function runEngineCommand(props: {
 				return 2;
 			case 'stopped':
 				environment.write(
-					unansweredWords(
-						subcommand,
+					readUnansweredWords(
 						walk.outcome,
 						walk.after === null ? 'engine retired' : `engine retired --cursor ${walk.after}`,
 					),
@@ -333,9 +391,15 @@ export async function runEngineCommand(props: {
 		attemptId,
 	});
 	const outcome = await run(operation);
-	const repeat = `engine ${subcommand} ${attemptId} --operation-id ${operationId}`;
+	const repeatLine = repairRepeatCommand({
+		targetPath: props.targetPath,
+		subcommand,
+		attemptId,
+		operationId,
+	});
 	if (outcome.kind !== 'answered') {
-		environment.write(unansweredWords(subcommand, outcome, repeat));
+		for (const line of repairUnansweredLines(subcommand, outcome, repeatLine))
+			environment.write(line);
 		return outcome.kind === 'not-confirmed' ? 2 : 1;
 	}
 	const reply = outcome.result;
@@ -358,7 +422,8 @@ export async function runEngineCommand(props: {
 		case 'workspaces':
 		case 'engineHealth':
 		case 'engineRetired':
-			environment.write(`Central did not answer. Repeat with: ${repeat}; it will not apply twice.`);
+			for (const line of repairUnansweredLines(subcommand, { kind: 'unknown' }, repeatLine))
+				environment.write(line);
 			return 1;
 		default:
 			return reply satisfies never;

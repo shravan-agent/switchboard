@@ -5,20 +5,30 @@ import {
 	fleetAdminIntentDigest,
 	fleetAdminRequestSchema,
 } from '@agent-collaboration/sign-in-core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { readAuthTarget } from '#sign-in-owner-cli/auth-target';
 import {
 	runEngineCommand,
 	walkRetiredPages,
 	type EngineCommandOptions,
 } from '#sign-in-owner-cli/fleet/engine-cli-command';
+import type { FleetCliEnvironment } from '#sign-in-owner-cli/fleet/fleet-cli-commands';
 import {
 	authTarget,
 	decodeJwt,
+	documentedEntrypoint,
+	posixShellWords,
 	scenario,
 	target,
 } from '#sign-in-owner-cli/fleet/fleet-cli-test-world';
+import { runOwnerCli } from '#sign-in-owner-cli/owner-cli';
+
+vi.mock('#sign-in-owner-cli/auth-target', { spy: true });
+
+/** The `--target` file in use: a space and a quote, so the printed line must quote it. */
+const targetPath = "/private/runtime/owner's fleet target.json";
 
 // Central's engine reply bytes (sign-in-core contract-fixtures, codex-router main 4593797b1).
 const replyVectors = z
@@ -59,10 +69,39 @@ const retiredItem = (id: string): object => ({
 const page = (items: readonly object[], next: string | null) => (): Response =>
 	Response.json({ result: 'engineRetired', items, next });
 
+interface EngineRun {
+	readonly exitCode: number;
+	readonly lines: string[];
+	readonly calls: {
+		readonly path: string;
+		readonly body: unknown;
+		readonly proof: Record<string, unknown>;
+	}[];
+	readonly refreshes: number;
+	readonly confirmations: number;
+}
+
+/** One `engine` command through runEngineCommand, with the target file in use named. */
 async function engine(
 	args: readonly string[],
 	relayReplies: readonly (() => Response)[],
 	options: EngineCommandOptions & { readonly all?: boolean } = {},
+	confirmSecondFactor: () => Promise<boolean> = async () => {
+		throw new Error('no step-up expected');
+	},
+): Promise<EngineRun> {
+	return observed(
+		relayReplies,
+		async (environment) =>
+			runEngineCommand({ arguments: args, targetPath, target: authTarget, options, environment }),
+		confirmSecondFactor,
+	);
+}
+
+/** Runs `command` against a scenario's relay and collects what it printed and sent. */
+async function observed(
+	relayReplies: readonly (() => Response)[],
+	command: (environment: FleetCliEnvironment) => Promise<number>,
 	confirmSecondFactor: () => Promise<boolean> = async () => {
 		throw new Error('no step-up expected');
 	},
@@ -80,19 +119,14 @@ async function engine(
 	const world = await scenario(relayReplies);
 	const lines: string[] = [];
 	let confirmations = 0;
-	const exitCode = await runEngineCommand({
-		arguments: args,
-		target: authTarget,
-		options,
-		environment: {
-			io: world.io,
-			store: () => world.store,
-			confirmSecondFactor: async () => {
-				confirmations += 1;
-				return confirmSecondFactor();
-			},
-			write: (line) => lines.push(line),
+	const exitCode = await command({
+		io: world.io,
+		store: () => world.store,
+		confirmSecondFactor: async () => {
+			confirmations += 1;
+			return confirmSecondFactor();
 		},
+		write: (line) => lines.push(line),
 	});
 	return {
 		exitCode,
@@ -360,7 +394,10 @@ describe('engine retry and discard', (): void => {
 		],
 		['stale', `Stale: attempt ${attemptId}'s subject moved or is gone; nothing changed.`],
 		['subjectUnreadable', `Attempt ${attemptId}'s subject could not be read; nothing changed.`],
-		['conflict', 'This operation id was already used for a different request; nothing changed.'],
+		[
+			'conflict',
+			'Central answered conflict: either the authorization it admitted this discard under changed while applying it, or this operation id is already held by another request or person. Nothing was written to the attempt or its subject.',
+		],
 		[
 			'notPermitted',
 			"Not permitted: repairing engine work needs the organization owner's organization:repairWork.",
@@ -371,17 +408,12 @@ describe('engine retry and discard', (): void => {
 		expect(result).toMatchObject({ exitCode: 2, lines: [words] });
 	});
 
-	it('an unavailable central leaves the outcome unknown and names the operation to repeat', async (): Promise<void> => {
-		// Act
-		const result = await engine(['retry', attemptId], [relayUnavailable]);
-		// Assert
-		const operationId = z
-			.object({ operationId: z.string() })
-			.parse(result.calls[0]?.body).operationId;
+	it('retry refused conflict names only the operation id: its guard miss is notFound', async (): Promise<void> => {
+		const result = await engine(['retry', attemptId], [refused('conflict')]);
 		expect(result).toMatchObject({
-			exitCode: 1,
+			exitCode: 2,
 			lines: [
-				`Central is unavailable; this retry may or may not have applied. Repeat with: engine retry ${attemptId} --operation-id ${operationId}; it will not apply twice.`,
+				'Central answered conflict: this operation id is already held by another request or person. Nothing was written to the attempt or its subject.',
 			],
 		});
 	});
@@ -447,4 +479,60 @@ describe('engine arguments are refused before any credential or request', (): vo
 			confirmations: 0,
 		});
 	});
+});
+
+describe('the printed repair repeat line, run through the owner CLI', (): void => {
+	const repairBody = z.strictObject({
+		organizationId: z.string(),
+		operationId: z.uuidv7(),
+		attemptId: z.string(),
+	});
+	const replyFor = { retry: 'retried', discard: 'discarded' } as const;
+
+	it.each([
+		['retry', 'unavailable', relayUnavailable],
+		['discard', 'unavailable', relayUnavailable],
+		['retry', 'no answer', (): Response => new Response('not json', { status: 200 })],
+		['discard', 'no answer', (): Response => new Response('not json', { status: 200 })],
+	] as const)(
+		'%s with %s: run exactly as printed, entrypoint and --target included, it repeats the same operation',
+		async (subcommand, _cause, firstReply): Promise<void> => {
+			// Arrange: the first send gets no readable answer.
+			const first = await engine([subcommand, attemptId], [firstReply]);
+			expect(first.exitCode).toBe(1);
+			const firstBody = repairBody.parse(first.calls[0]?.body);
+			// The first line explains, naming central's 24-hour receipt limit; the second is the
+			// command alone, exactly what a person copies.
+			expect(first.lines).toHaveLength(2);
+			const [explanation = '', printedLine = ''] = first.lines;
+			expect(explanation).toMatch(/run the next line exactly/u);
+			expect(explanation).toMatch(/24-hour receipt limit/u);
+			// The entrypoint is the one --help documents.
+			const help = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+			expect(await runOwnerCli(['--help'])).toBe(0);
+			expect(String(help.mock.calls[0]?.[0])).toMatch(
+				new RegExp(`^Usage: ${documentedEntrypoint.join(' ')} --target FILE `, 'u'),
+			);
+			help.mockRestore();
+
+			// Act: read the line as a POSIX shell would; what follows the entrypoint's words is the
+			// argv the CLI's own parser reads.
+			const words = posixShellWords(printedLine);
+			vi.mocked(readAuthTarget).mockClear().mockResolvedValueOnce(authTarget);
+			const recovered = await observed([vector(replyFor[subcommand])], async (environment) =>
+				runOwnerCli(words.slice(documentedEntrypoint.length), environment),
+			);
+
+			// Assert: the documented entrypoint, the target in use, and the same operation.
+			expect(words.slice(0, documentedEntrypoint.length)).toEqual(documentedEntrypoint);
+			expect(vi.mocked(readAuthTarget)).toHaveBeenCalledExactlyOnceWith(targetPath);
+			expect(recovered.exitCode).toBe(0);
+			expect(recovered.calls.map((call) => call.path)).toEqual([
+				`/api/auth/organization-admin/v1/engine-${subcommand}`,
+			]);
+			expect(recovered.calls[0]?.body).toEqual(firstBody);
+			expect(recovered.calls[0]?.proof.intent).toBe(first.calls[0]?.proof.intent);
+			expect(recovered.calls[0]?.proof.jti).not.toBe(first.calls[0]?.proof.jti);
+		},
+	);
 });

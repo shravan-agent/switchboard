@@ -96,6 +96,8 @@ it.runIf(centralExecutable !== undefined && tokioPair)(
 					const lines: string[] = [];
 					const exitCode = await runEngineCommand({
 						arguments: args,
+						// The target is built in memory here; this names it in any printed repeat line.
+						targetPath: 'live-engine-target.json',
 						target,
 						options,
 						environment: {
@@ -146,7 +148,9 @@ it.runIf(centralExecutable !== undefined && tokioPair)(
 			});
 			expect(await owner(['discard', unknown], { 'operation-id': operationId })).toEqual({
 				exitCode: 2,
-				lines: ['This operation id was already used for a different request; nothing changed.'],
+				lines: [
+					'Central answered conflict: either the authorization it admitted this discard under changed while applying it, or this operation id is already held by another request or person. Nothing was written to the attempt or its subject.',
+				],
 			});
 			expect(await owner(['discard', ids.nextId()])).toEqual({
 				exitCode: 2,

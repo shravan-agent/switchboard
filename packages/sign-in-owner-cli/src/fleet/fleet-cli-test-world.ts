@@ -114,3 +114,31 @@ export const authTarget: AuthTarget = {
 	centralPublicOrigin: target.centralPublicOrigin,
 	ownerFleetCliClientId: target.ownerFleetCliClientId,
 };
+
+/** The owner CLI entrypoint exactly as its `--help` prints it, as the words a shell passes. */
+export const documentedEntrypoint = [
+	'mise',
+	'exec',
+	'--',
+	'node',
+	'scripts/verify-auth/owner-cli.ts',
+];
+
+/**
+ * The words a POSIX shell reads from a line built only of unquoted safe characters,
+ * single-quoted text and `\'` (XCU 2.2.1–2.2.2). Any other shell syntax is refused, not guessed.
+ */
+export function posixShellWords(line: string): string[] {
+	const wordPattern = /^((?:'[^']*'|\\'|[\w./=:@%+,-])+)(?: |$)/u;
+	const words: string[] = [];
+	let rest = line;
+	while (rest !== '') {
+		const match = wordPattern.exec(rest);
+		if (match?.[1] === undefined) throw new Error(`Not a plain shell word at: ${rest}`);
+		words.push(
+			match[1].replaceAll(/'([^']*)'|\\'/gu, (_segment, quoted?: string) => quoted ?? "'"),
+		);
+		rest = rest.slice(match[0].length);
+	}
+	return words;
+}

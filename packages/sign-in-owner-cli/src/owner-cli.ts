@@ -94,6 +94,7 @@ This switch makes no hardware-presence or per-command human-intent claim. Every 
 			if (positionals[0] === engineCommandName)
 				return await runEngineCommand({
 					arguments: positionals.slice(1),
+					targetPath,
 					target,
 					options: values,
 					environment:

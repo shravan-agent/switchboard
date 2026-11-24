@@ -17,6 +17,8 @@ import type { FleetCliEnvironment } from '#sign-in-owner-cli/fleet/fleet-cli-com
 import {
 	authTarget,
 	decodeJwt,
+	documentedEntrypoint,
+	posixShellWords,
 	scenario,
 	target,
 } from '#sign-in-owner-cli/fleet/fleet-cli-test-world';
@@ -27,8 +29,6 @@ vi.mock('#sign-in-owner-cli/auth-target', { spy: true });
 const organization = target.organizationId;
 /** The `--target` file in use: a space and a quote, so the printed line must quote it. */
 const targetPath = "/private/runtime/owner's fleet target.json";
-/** The owner CLI entrypoint exactly as its `--help` prints it. */
-const documentedEntrypoint = ['mise', 'exec', '--', 'node', 'scripts/verify-auth/owner-cli.ts'];
 const requestId = '019a3dce-2000-7000-8000-0000000000c1';
 const personId = '019a3dce-2000-7000-8000-0000000000d1';
 const window = { raisedAt: '2026-11-23T12:00:00.007Z', deadline: '2026-11-23T13:00:00.007Z' };
@@ -152,25 +152,6 @@ async function observed(
 		calls: world.relayCalls.map((call) => ({ ...call, body: JSON.parse(call.body) })),
 		refreshes: world.refreshCalls.length,
 	};
-}
-
-/**
- * The words a POSIX shell reads from a line built only of unquoted safe characters,
- * single-quoted text and `\'` (XCU 2.2.1–2.2.2). Any other shell syntax is refused, not guessed.
- */
-function posixShellWords(line: string): string[] {
-	const wordPattern = /^((?:'[^']*'|\\'|[\w./=:@%+,-])+)(?: |$)/u;
-	const words: string[] = [];
-	let rest = line;
-	while (rest !== '') {
-		const match = wordPattern.exec(rest);
-		if (match?.[1] === undefined) throw new Error(`Not a plain shell word at: ${rest}`);
-		words.push(
-			match[1].replaceAll(/'([^']*)'|\\'/gu, (_segment, quoted?: string) => quoted ?? "'"),
-		);
-		rest = rest.slice(match[0].length);
-	}
-	return words;
 }
 
 describe('approvals list', (): void => {
