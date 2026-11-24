@@ -710,3 +710,79 @@ it("approvals: after the grant is lost, a question's repeat with --operation-id 
 		await harness.close();
 	}
 });
+
+it('approvals: the stand-in answers like central 1ede5c1b9 for a malformed proof after a valid token, a forgotten floor, and a replay', async () => {
+	const fixture = await setupFleetCli();
+	const { harness, target } = fixture;
+	try {
+		const organizationId = target.organizationId;
+		const approvals = approvalsCli({ fixture, io: fixture.io, organizationId });
+		const session = await signInFleetCli({
+			target,
+			store: createMemoryProofKeyStore(webSignInCrypto),
+			io: fixture.io,
+		});
+
+		// A malformed DPoP header after a valid token is refused 401 (verifier.rs:153-158), not thrown.
+		const malformed = await fetch(
+			new URL('/api/auth/organization-admin/v1/approval-list', target.issuer),
+			{
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
+					authorization: `DPoP ${session.accessToken}`,
+					dpop: 'not-a-compact-jws',
+				},
+				body: JSON.stringify({ organization: organizationId, filter: 'waiting' }),
+			},
+		);
+		expect(malformed.status).toBe(401);
+		expect(harness.centralApprovals.arrivals.at(-1)?.outcome).toEqual({
+			kind: 'refused-unauthenticated',
+			failure: 'proof-header',
+		});
+
+		// A retained replay settles no deadline (approval_store_person_decide.rs:81-105).
+		const [decided, expiring] = [ids.nextId(), ids.nextId()];
+		harness.centralApprovals.seedUnprovenCall({
+			organizationId,
+			requestId: decided,
+			raisedAtMillis: initialTime - minute,
+		});
+		// Its deadline falls 30 seconds after now.
+		harness.centralApprovals.seedUnprovenCall({
+			organizationId,
+			requestId: expiring,
+			raisedAtMillis: initialTime - 60 * minute + 30_000,
+		});
+		expect(await approvals(['approve', decided])).toEqual({
+			exitCode: 0,
+			lines: ['Decision saved: allow.'],
+		});
+		const operationId = z.uuidv7().parse(harness.centralApprovals.arrivals.at(-1)?.operationId);
+		await fixture.setTime(initialTime + minute);
+		expect(await approvals(['approve', decided], { 'operation-id': operationId })).toEqual({
+			exitCode: 0,
+			lines: ['Decision saved: allow.'],
+		});
+		expect(harness.centralApprovals.settlements).toEqual([]);
+		// A list discovers the passed deadline and settles it.
+		await approvals(['list']);
+		expect(harness.centralApprovals.settlements).toEqual([
+			{ requestId: expiring, route: 'ApprovalList' },
+		]);
+
+		// Once central forgets the floors, admission reads the same forgotten state.
+		harness.centralProvisioning.forgetFloors();
+		expect(await approvals(['list'])).toEqual({
+			exitCode: 2,
+			lines: ['Central refused (authorizationSyncRequired).'],
+		});
+		expect(harness.centralApprovals.arrivals.at(-1)?.outcome).toEqual({
+			kind: 'refused',
+			reason: 'authorizationSyncRequired',
+		});
+	} finally {
+		await harness.close();
+	}
+});

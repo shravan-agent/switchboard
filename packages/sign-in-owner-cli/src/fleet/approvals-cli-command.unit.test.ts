@@ -4,22 +4,31 @@ import {
 	approvalPersonOperationSchema,
 	canonicalJson,
 } from '@agent-collaboration/sign-in-core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { readAuthTarget } from '#sign-in-owner-cli/auth-target';
 import {
 	decideReplyWords,
 	runApprovalsCommand,
 	type ApprovalsCommandOptions,
 } from '#sign-in-owner-cli/fleet/approvals-cli-command';
+import type { FleetCliEnvironment } from '#sign-in-owner-cli/fleet/fleet-cli-commands';
 import {
 	authTarget,
 	decodeJwt,
 	scenario,
 	target,
 } from '#sign-in-owner-cli/fleet/fleet-cli-test-world';
+import { runOwnerCli } from '#sign-in-owner-cli/owner-cli';
+
+vi.mock('#sign-in-owner-cli/auth-target', { spy: true });
 
 const organization = target.organizationId;
+/** The `--target` file in use: a space and a quote, so the printed line must quote it. */
+const targetPath = "/private/runtime/owner's fleet target.json";
+/** The owner CLI entrypoint exactly as its `--help` prints it. */
+const documentedEntrypoint = ['mise', 'exec', '--', 'node', 'scripts/verify-auth/owner-cli.ts'];
 const requestId = '019a3dce-2000-7000-8000-0000000000c1';
 const personId = '019a3dce-2000-7000-8000-0000000000d1';
 const window = { raisedAt: '2026-11-23T12:00:00.007Z', deadline: '2026-11-23T13:00:00.007Z' };
@@ -106,20 +115,36 @@ async function approvals(
 	/** Token refreshes: zero proves nothing reached the credential setup. */
 	readonly refreshes: number;
 }> {
+	return observed(relayReplies, (environment) =>
+		runApprovalsCommand({
+			arguments: args,
+			targetPath,
+			target: authTarget,
+			options,
+			environment,
+		}),
+	);
+}
+
+/** Runs `command` against a scenario's relay and collects what it printed and sent. */
+async function observed(
+	relayReplies: readonly (() => Response)[],
+	command: (environment: FleetCliEnvironment) => Promise<number>,
+): Promise<{
+	readonly exitCode: number;
+	readonly lines: string[];
+	readonly calls: { readonly path: string; readonly body: unknown; readonly proof: string }[];
+	readonly refreshes: number;
+}> {
 	const world = await scenario(relayReplies);
 	const lines: string[] = [];
-	const exitCode = await runApprovalsCommand({
-		arguments: args,
-		target: authTarget,
-		options,
-		environment: {
-			io: world.io,
-			store: () => world.store,
-			confirmSecondFactor: async () => {
-				throw new Error('approvals never ask for a second factor');
-			},
-			write: (line) => lines.push(line),
+	const exitCode = await command({
+		io: world.io,
+		store: () => world.store,
+		confirmSecondFactor: async () => {
+			throw new Error('approvals never ask for a second factor');
 		},
+		write: (line) => lines.push(line),
 	});
 	return {
 		exitCode,
@@ -127,6 +152,25 @@ async function approvals(
 		calls: world.relayCalls.map((call) => ({ ...call, body: JSON.parse(call.body) })),
 		refreshes: world.refreshCalls.length,
 	};
+}
+
+/**
+ * The words a POSIX shell reads from a line built only of unquoted safe characters,
+ * single-quoted text and `\'` (XCU 2.2.1–2.2.2). Any other shell syntax is refused, not guessed.
+ */
+function posixShellWords(line: string): string[] {
+	const wordPattern = /^((?:'[^']*'|\\'|[\w./=:@%+,-])+)(?: |$)/u;
+	const words: string[] = [];
+	let rest = line;
+	while (rest !== '') {
+		const match = wordPattern.exec(rest);
+		if (match?.[1] === undefined) throw new Error(`Not a plain shell word at: ${rest}`);
+		words.push(
+			match[1].replaceAll(/'([^']*)'|\\'/gu, (_segment, quoted?: string) => quoted ?? "'"),
+		);
+		rest = rest.slice(match[0].length);
+	}
+	return words;
 }
 
 describe('approvals list', (): void => {
@@ -246,7 +290,8 @@ describe('approvals approve and deny', (): void => {
 		expect(result.exitCode).toBe(1);
 		const operationId = String(Reflect.get(Object(result.calls[1]?.body), 'operationId'));
 		expect(result.lines).toEqual([
-			`Central did not answer. Repeat with: approvals approve ${requestId} --operation-id ${operationId} --option 4. A repeat sends the decide without reading the request, so it must carry this exact answer; it will not be decided twice.`,
+			"Central did not answer. To repeat, run the next line exactly. It sends the decide without reading the request, with this exact answer and operation id; within central's 24-hour retention it will not be decided twice.",
+			`mise exec -- node scripts/verify-auth/owner-cli.ts --target '/private/runtime/owner'\\''s fleet target.json' approvals approve '${requestId}' --operation-id '${operationId}' --option '4'`,
 		]);
 		expect(result.calls[2]?.body).toEqual(result.calls[1]?.body);
 	});
@@ -612,48 +657,64 @@ describe('question recovery with --answer', (): void => {
 			expect(result.refreshes).toBe(0);
 		},
 	);
+});
 
-	it('the no-answer advice prints the question repeat whose --answer round-trips to the same canonical bytes', async (): Promise<void> => {
-		// Arrange: a first answer, built from --field arguments, gets no answer twice.
-		const result = await approvals(
-			['answer', requestId],
-			[readRequest(questionView), unavailable, unavailable],
-			{ field: ['2=2', "1=it's latency"] },
-		);
-		expect(result.exitCode).toBe(1);
-		const firstBody = z
-			.object({ operationId: z.string(), answer: z.unknown() })
-			.parse(result.calls[1]?.body);
-		const [advice = ''] = result.lines;
-		// Act: read the printed --answer word as a POSIX shell would, then recover with it.
-		const printed = /--answer '((?:[^']|'\\'')*)'\./u.exec(advice)?.[1]?.replaceAll("'\\''", "'");
-		expect(advice).toContain(
-			`approvals answer ${requestId} --operation-id ${firstBody.operationId} --answer '`,
-		);
-		const recovered = await approvals(
-			['answer', requestId],
-			[savedAnswer({ kind: 'question', answer: questionAnswer })],
-			{ 'operation-id': firstBody.operationId, answer: printed },
-		);
-		// Assert: the recovery's answer, and so its signed intent, is the first send's, byte for byte.
-		const recoveredBody = z
-			.object({ operationId: z.string(), answer: z.unknown() })
-			.parse(recovered.calls[0]?.body);
-		expect(recoveredBody).toEqual(firstBody);
-		const intent = (body: typeof firstBody): string =>
-			canonicalJson(
-				approvalPersonIntent(
-					approvalPersonOperationSchema.parse({
-						operation: 'ApprovalDecide',
-						organization,
-						requestId,
-						...body,
-					}),
-				),
+describe('the printed repeat line, run through the owner CLI', (): void => {
+	const decideBody = z.object({ operationId: z.string(), answer: z.unknown() });
+
+	it.each([
+		['an unproven call', ['deny', requestId], unprovenCallView, {}],
+		['a provider approval', ['approve', requestId], twoAllowsView, { option: '4' }],
+		['a question', ['answer', requestId], questionView, { field: ['2=2', "1=it's latency"] }],
+	] as const)(
+		'%s: run exactly as printed, entrypoint included, it repeats the same decide with no read',
+		async (_kind, args, view, options): Promise<void> => {
+			// Arrange: the first decide gets no answer, nor does its retry.
+			const first = await approvals(args, [readRequest(view), unavailable, unavailable], options);
+			expect(first.exitCode).toBe(1);
+			const firstBody = decideBody.parse(first.calls[1]?.body);
+			// The second line is the command alone: exactly what a person copies.
+			const [, printedLine = ''] = first.lines;
+			// The entrypoint is the one --help documents.
+			const help = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+			expect(await runOwnerCli(['--help'])).toBe(0);
+			expect(String(help.mock.calls[0]?.[0])).toMatch(
+				new RegExp(`^Usage: ${documentedEntrypoint.join(' ')} --target FILE `, 'u'),
 			);
-		expect(intent(recoveredBody)).toBe(intent(firstBody));
-		expect(decodeJwt(recovered.calls[0]?.proof ?? '')['intent']).toBe(
-			decodeJwt(result.calls[1]?.proof ?? '')['intent'],
-		);
-	});
+			help.mockRestore();
+
+			// Act: read the line as a POSIX shell would; the entrypoint's words start the process,
+			// and what follows them is the argv the CLI's own parser reads.
+			const words = posixShellWords(printedLine);
+			vi.mocked(readAuthTarget).mockClear().mockResolvedValueOnce(authTarget);
+			const recovered = await observed([savedAnswer(Object(firstBody.answer))], (environment) =>
+				runOwnerCli(words.slice(documentedEntrypoint.length), environment),
+			);
+
+			// Assert: the documented entrypoint, the target in use, and the same decide, unread.
+			expect(words.slice(0, documentedEntrypoint.length)).toEqual(documentedEntrypoint);
+			expect(vi.mocked(readAuthTarget)).toHaveBeenCalledExactlyOnceWith(targetPath);
+			expect(recovered.exitCode).toBe(0);
+			expect(recovered.calls.map((call) => call.path)).toEqual([
+				'/api/auth/organization-admin/v1/approval-decide',
+			]);
+			const recoveredBody = decideBody.parse(recovered.calls[0]?.body);
+			expect(recoveredBody).toEqual(firstBody);
+			const intent = (body: typeof firstBody): string =>
+				canonicalJson(
+					approvalPersonIntent(
+						approvalPersonOperationSchema.parse({
+							operation: 'ApprovalDecide',
+							organization,
+							requestId,
+							...body,
+						}),
+					),
+				);
+			expect(intent(recoveredBody)).toBe(intent(firstBody));
+			expect(decodeJwt(recovered.calls[0]?.proof ?? '')['intent']).toBe(
+				decodeJwt(first.calls[1]?.proof ?? '')['intent'],
+			);
+		},
+	);
 });

@@ -28,6 +28,13 @@ import type { CentralHeldFloors } from '#sign-in-test-support/test-fixtures/cont
  * seeded from them. It follows central's result matrix for list paging, notVisible, the decide
  * results and the operation log, but earns no credit for central's store, admission or deadline
  * settlement; only the sign-in side's sends and readings are proven here.
+ *
+ * Known limits (Sign-in Lead, PR #24 closure): two of central's checks stay outside this stand-in.
+ * - The organization's reject-through watermark (fleet-signin/src/person_proof/admission.rs:212):
+ *   the provisioning peer does not carry it, so a request at or below it is not refused here.
+ * - Validation of a retained answer against the stored decision state
+ *   (fleet-approvals/src/approval_store_person_decide.rs:308-345): a retained reply is replayed
+ *   as stored, without re-deriving it from the approval's ending.
  */
 export const approvalRouteByPath: Readonly<Record<string, ApprovalPersonOperationName>> = {
 	[approvalPersonRoutePaths.ApprovalList]: 'ApprovalList',
@@ -131,6 +138,11 @@ export interface ControlledCentralApprovals {
 		readonly offer: QuestionOffer;
 	}) => void;
 	readonly setPageSize: (size: number) => void;
+	/** Each deadline the stand-in settled, with the route that discovered it. */
+	readonly settlements: readonly {
+		readonly requestId: string;
+		readonly route: ApprovalPersonOperationName;
+	}[];
 	/**
 	 * The next admitted decide is applied and retained, but its reply is lost on the way back
 	 * (central answers 503): the "reply lost" row, recovered by an exact retry.
@@ -279,10 +291,15 @@ export function createControlledCentralApprovals(
 	let pageSize = 100;
 	let loseNextDecide = false;
 
-	function settleDeadline(stored: StoredRequest): void {
+	/** Each deadline a request settled, and which route discovered it: a replay settles none. */
+	const settlements: { readonly requestId: string; readonly route: ApprovalPersonOperationName }[] =
+		[];
+
+	function settleDeadline(stored: StoredRequest, route: ApprovalPersonOperationName): void {
 		const deadline = stored.raisedAtMillis + oneHourMillis;
-		if (stored.ending === null && props.now() >= deadline)
-			stored.ending = { kind: 'timedOut', atMillis: deadline };
+		if (stored.ending !== null || props.now() < deadline) return;
+		stored.ending = { kind: 'timedOut', atMillis: deadline };
+		settlements.push({ requestId: stored.requestId, route });
 	}
 
 	function window(stored: StoredRequest): { readonly raisedAt: string; readonly deadline: string } {
@@ -423,8 +440,10 @@ export function createControlledCentralApprovals(
 		intent: string,
 	): CentralReply {
 		const organizationId = claims.organization_id;
-		for (const stored of requests) settleDeadline(stored);
 		if (route === 'ApprovalList') {
+			// A list settles the timeouts it discovers (approval-person-results.md: list page).
+			for (const stored of requests)
+				if (stored.organizationId === organizationId) settleDeadline(stored, route);
 			const cursor = body.cursor ?? null;
 			const visible = requests
 				.filter((stored) => stored.organizationId === organizationId)
@@ -439,17 +458,21 @@ export function createControlledCentralApprovals(
 			};
 		}
 		const stored = find(organizationId, body.requestId);
-		if (route === 'ApprovalRead')
-			return stored === undefined
-				? { kind: 'notVisible' }
-				: { kind: 'request', view: view(stored) };
-		// approval_store_person_decide.rs:83-100: a retained result for this operation id is
-		// replayed to its own caller with the same intent; anything else is operationConflict.
+		if (route === 'ApprovalRead') {
+			if (stored === undefined) return { kind: 'notVisible' };
+			settleDeadline(stored, route);
+			return { kind: 'request', view: view(stored) };
+		}
+		// Retained first (approval_store_person_decide.rs:81-105): a retained result for this
+		// operation id is replayed to its own caller with the same intent, anything else is
+		// operationConflict, and neither applies a decision nor settles a deadline.
 		const prior = retained(organizationId, body.operationId);
 		if (prior !== undefined)
 			return prior.personId === claims.sub && prior.intent === intent
 				? prior.reply
 				: { kind: 'operationConflict' };
+		// Only then does the decide apply, settling its own request's deadline if it discovers it.
+		if (stored !== undefined) settleDeadline(stored, route);
 		const reply = decide(stored, body, claims);
 		operationLog.set(`${organizationId}/${body.operationId ?? ''}`, {
 			personId: claims.sub,
@@ -486,6 +509,7 @@ export function createControlledCentralApprovals(
 
 	return {
 		arrivals,
+		settlements,
 		seedUnprovenCall(seed): void {
 			requests.push({ ...seed, offer: { kind: 'unprovenCall' }, ending: null });
 		},

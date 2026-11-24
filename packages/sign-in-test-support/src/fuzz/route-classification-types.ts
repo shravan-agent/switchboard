@@ -19,6 +19,7 @@ export type PermittedRefusalEffect =
 	| 'callback-outcome'
 	| 'none'
 	| 'consume-passkey-challenge'
+	| 'consume-passkey-registration-challenge'
 	| 'factor-intent'
 	| 'people-change-intent'
 	| 'login-link-intent'

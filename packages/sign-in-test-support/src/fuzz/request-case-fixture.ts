@@ -49,6 +49,8 @@ export interface RequestCaseFixture {
 	readonly invitedPersonId: string;
 	readonly issuedCredentials: readonly string[];
 	readonly permittedVerificationIds: readonly string[];
+	/** The verification row of the registration challenge this case's options request issued, if any. */
+	readonly registrationChallengeId: string | null;
 }
 
 async function requireId(response: Response): Promise<string> {
@@ -262,6 +264,19 @@ export async function createRequestCaseFixture(props: {
 				),
 			};
 		}
+		if (props.path.startsWith('/api/auth/passkey/') && props.caller === 'signed-out') {
+			// Refused before verification, but the family still builds its nested variants from a real credential.
+			context = {
+				...context,
+				passkeyRegistrationResponse: z.record(z.string(), z.unknown()).parse(
+					(await createSoftwarePasskeyAuthenticator()).registrationResponse({
+						challenge: 'dW5pc3N1ZWQtY2hhbGxlbmdl',
+						rpId: new URL(harness.issuer).hostname,
+						origin: harness.issuer,
+					}),
+				),
+			};
+		}
 		if (props.path.startsWith('/api/auth/oauth2/') && props.caller === 'owner') {
 			const bootstrap = await auth('/api/auth/owner/bootstrap', {
 				method: 'POST',
@@ -330,6 +345,22 @@ export async function createRequestCaseFixture(props: {
 				}
 			})
 			.map((row) => row.id);
+		const registrationChallengeIds = verificationRows
+			.filter((row) => {
+				try {
+					return z
+						.object({
+							type: z.literal('registration'),
+							userData: z.object({ id: z.literal(personId) }),
+						})
+						.safeParse(JSON.parse(row.value)).success;
+				} catch {
+					return false;
+				}
+			})
+			.map((row) => row.id);
+		if (registrationChallengeIds.length > 1)
+			throw new Error('F1 fixture holds more than one live registration challenge');
 		const foreignInvitations = await harness.database
 			.select({ id: invitation.id })
 			.from(invitation)
@@ -362,6 +393,7 @@ export async function createRequestCaseFixture(props: {
 						: [foreignEmail],
 			issuedCredentials,
 			permittedVerificationIds,
+			registrationChallengeId: registrationChallengeIds[0] ?? null,
 		};
 	} catch (error) {
 		if (props.existingHarness === undefined) await harness.close();

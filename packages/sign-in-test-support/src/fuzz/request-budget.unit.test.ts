@@ -114,6 +114,24 @@ function assertRequestsAreTheirVariants(built: readonly GeneratedRequest[]): voi
 			expect(fields).toBeUndefined();
 			continue;
 		}
+		if (step.encoding === 'json-nested') {
+			// A nested change leaves every other body field alone and changes the credential inside `response`.
+			expect(contentType).toContain('application/json');
+			const validJson = validFieldsOf({
+				...step,
+				encoding: 'json',
+				field: null,
+				mutation: 'valid',
+			});
+			expect(validJson, 'the valid json request to compare with').toBeDefined();
+			if (validJson !== undefined && fields !== undefined)
+				expect(
+					Object.keys({ ...validJson, ...fields }).filter(
+						(name) => validJson[name] !== fields[name],
+					),
+				).toEqual(['response']);
+			continue;
+		}
 		// An encoding is what the wire says it is.
 		if (step.encoding === 'json') expect(contentType).toContain('application/json');
 		if (step.encoding === 'form')
@@ -155,6 +173,23 @@ function machineTokenInventory(flow: string, fields: readonly string[]): readonl
 	];
 }
 
+/** The nested members of a real registration credential, changed one at a time (written out, not derived). */
+const nestedRegistrationInventory: readonly string[] = [
+	'json-nested|clientDataJSON.challenge|near-valid',
+	'json-nested|clientDataJSON.origin|near-valid',
+	'json-nested|clientDataJSON.type|wrong-type',
+	'json-nested|attestationObject.fmt|near-valid',
+	'json-nested|attestationObject.fmt|wrong-type',
+	'json-nested|attestationObject.attStmt|near-valid',
+	'json-nested|attestationObject.attStmt|boundary',
+	'json-nested|attestationObject.authData|boundary',
+	'json-nested|attestationObject.authData.flags|near-valid',
+	'json-nested|attestationObject.authData.flags|boundary',
+	'json-nested|attestationObject.authData.rpIdHash|near-valid',
+	'json-nested|attestationObject.authData.credentialPublicKey|wrong-type',
+	'json-nested|attestationObject.authData.credentialPublicKey|near-valid',
+];
+
 function independentInventory(family: RequestFamily): readonly string[] {
 	const path = family.route.path;
 	const method = family.route.method;
@@ -185,6 +220,7 @@ function independentInventory(family: RequestFamily): readonly string[] {
 			'wrong-content-type|-|valid',
 		].toSorted();
 	const valid = generateOnce(family, family.variantSteps(context)[0]);
+
 	const names = Object.keys(fieldsOf(valid) ?? {});
 	const fieldCases = (encoding: string): string[] => [
 		`${encoding}|-|valid`,
@@ -195,6 +231,7 @@ function independentInventory(family: RequestFamily): readonly string[] {
 				)),
 	];
 	return [
+		...(path === '/api/auth/passkey/verify-registration' ? nestedRegistrationInventory : []),
 		...fieldCases(primary),
 		...(acceptsJsonToo ? [...fieldCases('json'), 'malformed|-|valid'] : []),
 		...(primary === 'json' ? ['malformed|-|valid'] : []),

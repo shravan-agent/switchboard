@@ -130,6 +130,7 @@ import {
 	turnstileTestSecret,
 	turnstileTestSiteKey,
 } from '#sign-in-test-support/test-fixtures/turnstile-test-keys';
+import { webCryptoDigestFailureStateSchema } from '#sign-in-test-support/test-fixtures/web-crypto-digest-failure';
 import { clockedWorkerManifest } from '#sign-in-test-support/test-fixtures/worker-module-manifest';
 
 export * from '#sign-in-test-support/test-fixtures/local-auth-configuration';
@@ -203,6 +204,11 @@ export async function startLocalAuthHarness(
 		readonly useControlledPasskeyWindow: () => Promise<void>;
 		readonly failNextPasskeyUserRead: () => Promise<void>;
 		readonly failNextPasskeyReleaseCleanup: () => Promise<void>;
+		/** The host's next WebCrypto digest of exactly these bytes rejects (OperationError), once. */
+		readonly failNextWebCryptoDigestOf: (input: Uint8Array) => Promise<void>;
+		readonly webCryptoDigestFailureState: () => Promise<
+			z.infer<typeof webCryptoDigestFailureStateSchema>
+		>;
 		readonly passkeyReleaseFailureState: () => Promise<
 			z.infer<typeof passkeyReleaseFailureStateSchema>
 		>;
@@ -979,6 +985,22 @@ export async function startLocalAuthHarness(
 		async failNextPasskeyUserRead(): Promise<void> {
 			const response = await auth('/__auth-proof/fail-next-passkey-user-read', { method: 'POST' });
 			if (!response.ok) throw new Error('Passkey user read fault not armed');
+		},
+		async failNextWebCryptoDigestOf(input: Uint8Array): Promise<void> {
+			const response = await auth('/__auth-proof/web-crypto-digest-failure', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ inputBase64url: Buffer.from(input).toString('base64url') }),
+			});
+			if (!response.ok) throw new Error('WebCrypto digest fault not armed');
+		},
+		async webCryptoDigestFailureState(): Promise<
+			z.infer<typeof webCryptoDigestFailureStateSchema>
+		> {
+			const response = await auth('/__auth-proof/web-crypto-digest-failure');
+			return z
+				.strictObject({ state: webCryptoDigestFailureStateSchema })
+				.parse(await response.json()).state;
 		},
 		async failNextPasskeyReleaseCleanup(): Promise<void> {
 			const response = await auth('/__auth-proof/passkey-release-failure', { method: 'POST' });

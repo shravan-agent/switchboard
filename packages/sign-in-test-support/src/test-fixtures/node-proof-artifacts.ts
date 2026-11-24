@@ -48,6 +48,7 @@ async function nodeConfigurationSource(root: string): Promise<string> {
 		'closed-siteverify-endpoint',
 		'node-auth-proof-host',
 		'passkey-release-failure',
+		'web-crypto-digest-failure',
 		'node-proof-invocation-failure',
 		'jwks-fetch-observation',
 		'node-proof-store',

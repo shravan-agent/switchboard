@@ -255,6 +255,31 @@ it('organization admin forwarding treats an engine-only refusal as upstream unav
 	}
 });
 
+it('organization admin forwarding treats an engine-only refusal to CreateWorkspace as upstream unavailable', async (): Promise<void> => {
+	const fixture = await setup();
+	try {
+		fixture.harness.centralAdmin.scriptNextRawAnswer('CreateWorkspace', {
+			result: 'refused',
+			reason: 'stale',
+		});
+		const response = await adminPost(
+			fixture,
+			'create-workspace',
+			createBody(fixture, controlledSignInIds.nextId()),
+		);
+		expect(fixture.harness.centralAdmin.arrivals.at(-1)).toMatchObject({
+			route: 'CreateWorkspace',
+			outcome: { kind: 'scripted-raw' },
+		});
+		expect([response.status, await response.json()]).toEqual([
+			503,
+			{ error: 'central-unavailable' },
+		]);
+	} finally {
+		await fixture.harness.close();
+	}
+});
+
 it('organization admin page: renders targeted and allowance records with three distinct origins', async (): Promise<void> => {
 	const { harness, cookie, ownerId, organizationId } = await setup();
 	try {

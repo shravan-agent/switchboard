@@ -72,6 +72,9 @@ export const signInRequestPolicies = {
 } as const satisfies Readonly<Record<SignInRequestClass, RequestLimitPolicy>>;
 
 export function classifySignInRequest(pathname: string): SignInRequestClass {
+	// A session-gated read of the caller's own passkey records: nothing in it can be guessed, so it
+	// must not spend the sign-in attempts budget. Every passkey ceremony and write stays below.
+	if (pathname === '/api/auth/passkey/list-user-passkeys') return 'other';
 	if (pathname.startsWith('/api/auth/callback/') || pathname.startsWith('/api/auth/passkey/'))
 		return 'callback-passkey';
 	if (pathname.startsWith('/api/auth/sign-in/') || pathname.startsWith('/api/auth/sign-up/'))

@@ -26,6 +26,30 @@ const factorActions: Readonly<Record<string, string>> = {
 	'/api/auth/passkey/confirm': 'passkey-confirmed',
 };
 
+const nativeUserVerificationRefusalSchema = z.looseObject({
+	code: z.literal('USER_VERIFICATION_REQUIRED'),
+});
+/**
+ * verify-registration consumes its challenge natively only on the way to the afterVerification
+ * user-verification refusal (403 USER_VERIFICATION_REQUIRED). Then exactly the challenge this case
+ * issued may go, and nothing else. Any other refusal (the boundary's 400s among them) consumes none.
+ */
+function isIssuedRegistrationChallengeConsumption(props: {
+	readonly removals: readonly StoredRow[];
+	readonly registrationChallengeId: string | null | undefined;
+	readonly answer: Pick<ObservedRequestAnswer, 'status' | 'body'> | undefined;
+}): boolean {
+	const [removed] = props.removals;
+	return (
+		props.answer?.status === 403 &&
+		nativeUserVerificationRefusalSchema.safeParse(props.answer.body).success &&
+		typeof props.registrationChallengeId === 'string' &&
+		props.removals.length === 1 &&
+		removed !== undefined &&
+		String(removed.id) === props.registrationChallengeId
+	);
+}
+
 function withoutFields(row: StoredRow, fields: readonly string[]): string {
 	return rowBytes(Object.fromEntries(Object.entries(row).filter(([key]) => !fields.includes(key))));
 }
@@ -89,6 +113,7 @@ export function assertRequestRefusalEffects(props: {
 	readonly fixture: Pick<RequestCaseFixture, 'sessionId'> & {
 		readonly context: Pick<RequestFamilyContext, 'personId' | 'passkeyId' | 'challengeId'>;
 		readonly permittedVerificationIds?: readonly string[];
+		readonly registrationChallengeId?: string | null;
 	};
 	readonly before: RequestStorageSnapshot;
 	readonly after: RequestStorageSnapshot;
@@ -216,6 +241,17 @@ export function assertRequestRefusalEffects(props: {
 				if (matches) continue;
 			}
 		}
+		if (
+			table === 'verification' &&
+			additions.length === 0 &&
+			permissions.includes('consume-passkey-registration-challenge') &&
+			isIssuedRegistrationChallengeConsumption({
+				removals,
+				registrationChallengeId: fixture.registrationChallengeId,
+				answer: props.answer,
+			})
+		)
+			continue;
 		if (table === 'verification' && additions.length === 0) {
 			const allowed = removals.every(
 				(row) =>

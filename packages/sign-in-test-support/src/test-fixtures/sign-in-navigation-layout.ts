@@ -4,7 +4,9 @@ import type { Route } from 'playwright';
 import { expect } from 'vitest';
 import { z } from 'zod';
 
+import { holdCommittedDocumentReply } from '#sign-in-test-support/test-fixtures/committed-document-reply-hold';
 import { controlledSignInIds } from '#sign-in-test-support/test-fixtures/controlled-sign-in-clock';
+import type { MePageWaitBlock } from '#sign-in-test-support/test-fixtures/me-page-request-tracker';
 import { withNativeBrowserCleanup } from '#sign-in-test-support/test-fixtures/native-browser-cleanup';
 import {
 	bootstrapNavigationAdmin,
@@ -12,6 +14,7 @@ import {
 	visitNavigation,
 	type NavigationBrowser,
 } from '#sign-in-test-support/test-fixtures/sign-in-navigation-browser';
+import { awaitMePageRequestsAfter } from '#sign-in-test-support/test-fixtures/sign-in-navigation-setup';
 
 export interface HeldBrowserReply {
 	readonly status: Promise<number>;
@@ -150,79 +153,93 @@ export async function observePasskeyLayout(browser: NavigationBrowser): Promise<
 	await runNavigationSteps([0, 1, 4], async (count): Promise<void> => {
 		await runNavigationSteps([400, 1280], async (width): Promise<void> => {
 			await proof.page.setViewportSize({ width, height: 844 });
-			const asset = await holdBrowserReply(browser, pageIsland);
+			const asset = await holdCommittedDocumentReply(proof, {
+				urlPattern: '*/assets/sign-in-pages-*.js',
+				matches: pageIsland,
+				signal: browser.signal,
+			});
 			await withNativeBrowserCleanup(
 				async (): Promise<void> => {
-					const list = await holdBrowserReply(browser, passkeyList);
+					const list = await holdCommittedDocumentReply(proof, {
+						urlPattern: '*/api/auth/passkey/list-user-passkeys*',
+						matches: passkeyList,
+						signal: browser.signal,
+					});
 					await withNativeBrowserCleanup(
-						async (): Promise<void> => {
-							const navigation = await proof.page.goto(`${harness.issuer}/me`, {
-								waitUntil: 'commit',
-							});
-							expect(navigation?.status()).toBe(200);
-							expect(await asset.status).toBe(200);
-							await add.waitFor();
-							await following.waitFor();
-							await proof.page.locator('[data-slot="skeleton"]').waitFor();
-							const ssr = await positions();
-							await installLayoutFrameProbe(proof);
-							await proof.evaluate("window.navigationLayoutFrames.next('mount')", z.literal(true));
-							asset.release();
-							expect(await list.status).toBe(200);
-							await proof.page
-								.locator('[data-sign-in-island-mounted] [data-slot="card-action"]')
-								.first()
-								.waitFor();
-							expect(await add.isEnabled()).toBe(true);
-							expect(await positions()).toEqual(ssr);
+						// The visit ends on the Me island's own requests, so the session request that is not
+						// held cannot still be open when the next visit or the harness close comes.
+						() =>
+							awaitMePageRequestsAfter(browser, async (): Promise<void> => {
+								const navigation = await proof.page.goto(`${harness.issuer}/me`, {
+									waitUntil: 'commit',
+								});
+								expect(navigation?.status()).toBe(200);
+								expect(await asset.status).toBe(200);
+								await add.waitFor();
+								await following.waitFor();
+								await proof.page.locator('[data-slot="skeleton"]').waitFor();
+								const ssr = await positions();
+								await installLayoutFrameProbe(proof);
+								await proof.evaluate(
+									"window.navigationLayoutFrames.next('mount')",
+									z.literal(true),
+								);
+								asset.release();
+								expect(await list.status).toBe(200);
+								await proof.page
+									.locator('[data-sign-in-island-mounted] [data-slot="card-action"]')
+									.first()
+									.waitFor();
+								expect(await add.isEnabled()).toBe(true);
+								expect(await positions()).toEqual(ssr);
 
-							await proof.evaluate("window.navigationLayoutFrames.next('list')", z.literal(true));
-							list.release();
-							const rows = proof.page
-								.getByRole('region', { name: 'Passkey list' })
-								.getByRole('listitem');
-							if (count === 0)
-								await proof.page.getByText('No passkeys yet.', { exact: true }).waitFor();
-							else await rows.nth(count - 1).waitFor({ state: 'attached' });
-							expect(await positions()).toEqual(ssr);
-							expect(await rows.count()).toBe(count);
-							const frames = await proof.evaluate(
-								'window.navigationLayoutFrames.finish()',
-								z.array(layoutFrame),
-							);
-							expect(new Set(frames.map((frame) => frame.phase))).toEqual(
-								new Set(['mount', 'list']),
-							);
-							// Compare every painted-frame opportunity from before
-							// the asset release through the settled list commit.
-							expect(
-								frames.every(
-									(frame) => frame.hit && frame.add !== null && frame.following !== null,
-								),
-							).toBe(true);
-							expect(
-								frames.every(
-									(frame) => JSON.stringify([frame.add, frame.following]) === JSON.stringify(ssr),
-								),
-							).toBe(true);
-							process.stdout.write(
-								`${JSON.stringify({ event: 'navigation-layout-frames', width, count, frames: frames.length })}\n`,
-							);
-							if (count > 1) {
-								const viewport = proof.page.getByRole('region', { name: 'Passkey list' });
+								await proof.evaluate("window.navigationLayoutFrames.next('list')", z.literal(true));
+								list.release();
+								const rows = proof.page
+									.getByRole('region', { name: 'Passkey list' })
+									.getByRole('listitem');
+								if (count === 0)
+									await proof.page.getByText('No passkeys yet.', { exact: true }).waitFor();
+								else await rows.nth(count - 1).waitFor({ state: 'attached' });
+								expect(await positions()).toEqual(ssr);
+								expect(await rows.count()).toBe(count);
+								const frames = await proof.evaluate(
+									'window.navigationLayoutFrames.finish()',
+									z.array(layoutFrame),
+								);
+								expect(new Set(frames.map((frame) => frame.phase))).toEqual(
+									new Set(['mount', 'list']),
+								);
+								// Compare every painted-frame opportunity from before
+								// the asset release through the settled list commit.
 								expect(
-									await viewport.evaluate((region) => region.scrollHeight > region.clientHeight),
+									frames.every(
+										(frame) => frame.hit && frame.add !== null && frame.following !== null,
+									),
 								).toBe(true);
-								await rows.last().getByRole('button', { name: 'Rename' }).focus();
 								expect(
-									await rows
-										.last()
-										.getByRole('button', { name: 'Rename' })
-										.evaluate((button) => button === document.activeElement),
+									frames.every(
+										(frame) => JSON.stringify([frame.add, frame.following]) === JSON.stringify(ssr),
+									),
 								).toBe(true);
-								expect(await viewport.evaluate((region) => region.scrollTop > 0)).toBe(true);
-							}
-						},
+								process.stdout.write(
+									`${JSON.stringify({ event: 'navigation-layout-frames', width, count, frames: frames.length })}\n`,
+								);
+								if (count > 1) {
+									const viewport = proof.page.getByRole('region', { name: 'Passkey list' });
+									expect(
+										await viewport.evaluate((region) => region.scrollHeight > region.clientHeight),
+									).toBe(true);
+									await rows.last().getByRole('button', { name: 'Rename' }).focus();
+									expect(
+										await rows
+											.last()
+											.getByRole('button', { name: 'Rename' })
+											.evaluate((button) => button === document.activeElement),
+									).toBe(true);
+									expect(await viewport.evaluate((region) => region.scrollTop > 0)).toBe(true);
+								}
+							}).then(() => undefined),
 						() => list.close(),
 					);
 				},
@@ -260,6 +277,15 @@ export async function observePasskeyLayout(browser: NavigationBrowser): Promise<
 			);
 		}
 	});
+	await observeCancelledHoldProof(browser);
+}
+
+/** Navigates to a Me document whose hold is cancelled before its request arrives. */
+export async function observeCancelledHoldProof(
+	browser: NavigationBrowser,
+	options: { readonly onBlocked?: (block: MePageWaitBlock) => void } = {},
+): Promise<void> {
+	const { proof, harness } = browser;
 	const cancelled = new AbortController();
 	const absent = await holdBrowserReply(
 		browser,
@@ -269,8 +295,16 @@ export async function observePasskeyLayout(browser: NavigationBrowser): Promise<
 	try {
 		cancelled.abort(new Error('Held request cancelled before arrival'));
 		absent.release();
-		await proof.navigate(`${harness.issuer}/me?hold-cancel-proof=1`);
-		await expect(absent.status).rejects.toThrow('Held request cancelled before arrival');
+		// The navigation ends on the Me island's own requests, not at DOMContentLoaded, so none is
+		// still open in the proof server when the harness closes.
+		await awaitMePageRequestsAfter(
+			browser,
+			async (): Promise<void> => {
+				await proof.navigate(`${harness.issuer}/me?hold-cancel-proof=1`);
+				await expect(absent.status).rejects.toThrow('Held request cancelled before arrival');
+			},
+			options,
+		);
 	} finally {
 		await absent.close();
 	}

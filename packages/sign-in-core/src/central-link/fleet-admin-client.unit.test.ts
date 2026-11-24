@@ -6,7 +6,9 @@ import { z } from 'zod';
 import {
 	createFleetAdminLinkClient,
 	fleetAdminResultSchemas,
+	type FleetAdminRefusalReason,
 } from '#sign-in-core/central-link/fleet-admin-client';
+import type { AdminRefusal } from '#sign-in-core/central-link/generated/central-sign-in.gen';
 import { organizationChangeFixtures } from '#sign-in-core/central-link/generated/organization-change-fixtures';
 import type { Uuid7 } from '#sign-in-core/contracts/sign-in-platform';
 import {
@@ -132,13 +134,45 @@ async function producerResults(kind: 'fixtures' | 'negatives'): Promise<readonly
 const resultFixtures = await producerResults('fixtures');
 const resultNegatives = await producerResults('negatives');
 
-const engineOnlyRefusals = [
-	'notFound',
-	'notRetired',
-	'discardUnsupported',
-	'stale',
-	'subjectUnreadable',
-] as const;
+type EngineOnlyRefusal = Exclude<AdminRefusal, FleetAdminRefusalReason>;
+// The ten reasons the three Sign-in admin routes admitted on main, pinned here on purpose: the live
+// decoder allowlist must not decide which refusals it is tested against, or a wrong widening of it
+// would remove that reason's negative case.
+const pinnedSignInRefusals = [
+	'nameInUse',
+	'notPermitted',
+	'secondFactorRequired',
+	'refreshRequired',
+	'authorizationSyncRequired',
+	'expired',
+	'requestTime',
+	'requestReused',
+	'conflict',
+	'rejected',
+] as const satisfies readonly AdminRefusal[];
+function isEngineOnlyRefusal(reason: string): reason is EngineOnlyRefusal {
+	return !pinnedSignInRefusals.some((pinned) => pinned === reason);
+}
+// Read from the generated `AdminRefusal` declaration, so a reason Central adds that no Sign-in route
+// admits is covered here without editing this file.
+const generatedSourceWithoutComments = (
+	await readFile(new URL('./generated/central-sign-in.gen.ts', import.meta.url), 'utf8')
+).replaceAll(/\/\*[\s\S]*?\*\//g, '');
+const generatedAdminRefusalDeclaration =
+	generatedSourceWithoutComments.match(/export type AdminRefusal =([^;]*);/)?.[1] ?? '';
+const generatedAdminRefusals = [...generatedAdminRefusalDeclaration.matchAll(/"(\w+)"/g)].map(
+	([, reason = '']) => reason,
+);
+const engineOnlyRefusals: readonly EngineOnlyRefusal[] =
+	generatedAdminRefusals.filter(isEngineOnlyRefusal);
+
+it('reads the whole generated refusal union, so no case is dropped by a partial read', (): void => {
+	// Nothing but quoted members and their bars may remain once the members are removed.
+	expect(generatedAdminRefusalDeclaration.replaceAll(/"\w+"|\||\s/g, '')).toBe('');
+	expect(generatedAdminRefusals).toEqual(expect.arrayContaining(pinnedSignInRefusals));
+	expect(new Set(generatedAdminRefusals).size).toBe(generatedAdminRefusals.length);
+	expect(engineOnlyRefusals).toEqual(expect.arrayContaining(['notFound', 'stale']));
+});
 
 it.each(engineOnlyRefusals)(
 	'treats engine-only refusal %s as malformed on every Sign-in admin route',

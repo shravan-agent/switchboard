@@ -111,6 +111,8 @@ it.runIf(centralExecutable !== undefined && tokioPair)(
 					const lines: string[] = [];
 					const exitCode = await runApprovalsCommand({
 						arguments: args,
+						// The target is built in memory here; this names it in any printed repeat line.
+						targetPath: 'live-c3-target.json',
 						target,
 						options,
 						environment: {

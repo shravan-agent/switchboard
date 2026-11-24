@@ -123,6 +123,8 @@ const credentialRefused = 'Central refused the fleet credential; run fleet-login
  */
 export async function runApprovalsCommand(props: {
 	readonly arguments: readonly string[];
+	/** The `--target` file as given: a printed repeat command names it again. */
+	readonly targetPath: string;
 	readonly target: AuthTarget;
 	readonly options: ApprovalsCommandOptions;
 	readonly environment: FleetCliEnvironment;
@@ -174,6 +176,7 @@ export async function runApprovalsCommand(props: {
 	const session = await fleetCliSession({ target, store, io });
 	const organization = target.organizationId;
 	const send = { target, session, io } as const;
+	const { targetPath } = props;
 
 	if (parsed[0] === 'list') {
 		const outcome = await sendApprovalOperation({
@@ -203,6 +206,7 @@ export async function runApprovalsCommand(props: {
 		return decideAndReport({
 			...send,
 			environment,
+			targetPath,
 			organization,
 			requestId,
 			operationId: recovery.operationId,
@@ -233,6 +237,7 @@ export async function runApprovalsCommand(props: {
 	return decideAndReport({
 		...send,
 		environment,
+		targetPath,
 		organization,
 		requestId,
 		operationId: io.nextId(),
@@ -246,6 +251,7 @@ async function decideAndReport(props: {
 	readonly session: Parameters<typeof decideApproval>[0]['session'];
 	readonly io: Parameters<typeof decideApproval>[0]['io'];
 	readonly environment: FleetCliEnvironment;
+	readonly targetPath: string;
 	readonly organization: string;
 	readonly requestId: string;
 	readonly operationId: string;
@@ -265,9 +271,12 @@ async function decideAndReport(props: {
 		},
 	});
 	if (decided.kind === 'unknown') {
+		// The command is a line of its own, with nothing after it, so copying it gives exactly it:
+		// the documented entrypoint, this --target, then the approvals words, every value quoted.
 		environment.write(
-			`Central did not answer. Repeat with: ${repeatCommand(props)}. A repeat sends the decide without reading the request, so it must carry this exact answer; it will not be decided twice.`,
+			"Central did not answer. To repeat, run the next line exactly. It sends the decide without reading the request, with this exact answer and operation id; within central's 24-hour retention it will not be decided twice.",
 		);
+		environment.write(repeatCommand(props));
 		return 1;
 	}
 	if (decided.kind !== 'replied') return writeUnanswered(environment, decided);

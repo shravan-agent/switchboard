@@ -6,10 +6,6 @@ import { syntheticRequestFamilyContext } from './synthetic-context';
 
 const context: RequestFamilyContext = {
 	...syntheticRequestFamilyContext,
-	passkeyRegistrationResponse: {
-		id: 'registration-credential',
-		response: { attestationObject: 'attestation' },
-	},
 	passkeyAuthenticationResponse: {
 		id: 'authentication-credential',
 		response: { signature: 'signature' },

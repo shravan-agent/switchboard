@@ -111,6 +111,11 @@ export function createSignInProvider(props: SignInProviderProps): SignInProvider
 	const agents = agentRegistrationPorts(props.store);
 	const workspaces = workspaceResourcePorts(props.store);
 	const machineLogin = props.configuration.machineLogin;
+	// One value for the passkey plugin and the registration boundary that recomputes its verification.
+	const passkeyRelyingParty = {
+		origin: props.configuration.issuer,
+		rpId: new URL(props.configuration.issuer).hostname,
+	};
 	const turnstile = createTurnstileProviderOptions({
 		configuration: props.configuration,
 		secret: props.turnstileSecret,
@@ -493,8 +498,8 @@ export function createSignInProvider(props: SignInProviderProps): SignInProvider
 				},
 			}),
 			passkey({
-				rpID: new URL(props.configuration.issuer).hostname,
-				origin: props.configuration.issuer,
+				rpID: passkeyRelyingParty.rpId,
+				origin: passkeyRelyingParty.origin,
 				authenticatorSelection: { userVerification: 'required' },
 				registration: {
 					afterVerification: async ({ verification }): Promise<void> => {
@@ -524,7 +529,11 @@ export function createSignInProvider(props: SignInProviderProps): SignInProvider
 			}),
 			createOrganizationMembershipReadPlugin({ store: props.store, platform: props.platform }),
 			twoFactor({ allowPasswordless: true }),
-			createSecondFactorProviderPlugin({ store: props.store, platform: props.platform }),
+			createSecondFactorProviderPlugin({
+				store: props.store,
+				platform: props.platform,
+				passkeyRelyingParty,
+			}),
 			createPasskeyConfirmationPlugin({
 				issuer: props.configuration.issuer,
 				store: props.store,

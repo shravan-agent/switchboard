@@ -8,6 +8,8 @@ import {
 	type ApprovalPersonReplyFor,
 } from '@agent-collaboration/sign-in-core';
 
+import { ownerCliEntrypoint, shellWord } from '#sign-in-owner-cli/owner-cli-entrypoint';
+
 // How the owner CLI turns an approve, a deny or `--field` arguments into central's Answer
 // (Sign-in Lead's DEL-06 step 2b decisions). Every refusal here happens before anything is sent.
 
@@ -345,29 +347,37 @@ export function recoveryAnswer(props: {
 			};
 }
 
-/** One POSIX shell word: single-quoted, with each `'` closed, escaped and reopened. */
-function shellWord(text: string): string {
-	return `'${text.replaceAll("'", "'\\''")}'`;
-}
-
 /**
- * The exact command that repeats this decide: the same operation id and the same answer, sent
- * without a read. A question's answer is printed whole as `--answer '<json>'` (its canonical
- * JSON, shell-quoted), since its fields cannot be retyped without the question.
+ * The exact, runnable command that repeats this decide: the documented entrypoint, the target in
+ * use, then the same operation id and answer, sent without a read. Every value is one quoted
+ * shell word. A question's answer is printed whole as `--answer '<json>'` (its canonical JSON),
+ * since its fields cannot be retyped without the question.
  */
 export function repeatCommand(props: {
+	readonly targetPath: string;
 	readonly requestId: string;
 	readonly operationId: string;
 	readonly answer: DecideAnswer;
 }): string {
-	const base = `--operation-id ${props.operationId}`;
+	const words = (verb: 'approve' | 'deny' | 'answer', ...flags: readonly string[]): string =>
+		[
+			ownerCliEntrypoint,
+			'--target',
+			shellWord(props.targetPath),
+			'approvals',
+			verb,
+			shellWord(props.requestId),
+			'--operation-id',
+			shellWord(props.operationId),
+			...flags,
+		].join(' ');
 	switch (props.answer.kind) {
 		case 'unprovenCall':
-			return `approvals ${props.answer.decision === 'allow' ? 'approve' : 'deny'} ${props.requestId} ${base}`;
+			return words(props.answer.decision === 'allow' ? 'approve' : 'deny');
 		case 'approval':
-			return `approvals approve ${props.requestId} ${base} --option ${props.answer.optionId}`;
+			return words('approve', '--option', shellWord(String(props.answer.optionId)));
 		case 'question':
-			return `approvals answer ${props.requestId} ${base} --answer ${shellWord(canonicalJson(props.answer.answer))}`;
+			return words('answer', '--answer', shellWord(canonicalJson(props.answer.answer)));
 		default:
 			return props.answer satisfies never;
 	}

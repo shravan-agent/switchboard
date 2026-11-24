@@ -350,6 +350,9 @@ const reachableRouteGroups: readonly ReachableRouteGroup[] = [
 		permittedRefusalEffects: [
 			'none',
 			'consume-passkey-challenge',
+			// verify-registration consumes its challenge before it verifies, so a ceremony that
+			// verifies and then fails policy (user verification) still ends the challenge.
+			'consume-passkey-registration-challenge',
 			'factor-intent',
 			'expired-session-cleanup',
 			'cookie-delete',
@@ -466,6 +469,8 @@ const reachableRoutes: readonly RouteClassification[] = reachableRouteGroups.fla
 			const effects = classification.permittedRefusalEffects.filter((effect) => {
 				if (effect === 'factor-intent') return factorIntentRoutes.has(path);
 				if (effect === 'consume-passkey-challenge') return path === '/api/auth/passkey/confirm';
+				if (effect === 'consume-passkey-registration-challenge')
+					return path === '/api/auth/passkey/verify-registration';
 				if (effect === 'login-link-intent') return path === '/api/auth/link-social';
 				return true;
 			});

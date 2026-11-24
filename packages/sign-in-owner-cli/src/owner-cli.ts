@@ -17,6 +17,7 @@ import {
 	runFleetCommand,
 	type FleetCliEnvironment,
 } from '#sign-in-owner-cli/fleet/fleet-cli-commands';
+import { ownerCliEntrypoint } from '#sign-in-owner-cli/owner-cli-entrypoint';
 import { openBrowser, ownerManagementToken } from '#sign-in-owner-cli/owner-cli-login';
 
 export async function runOwnerCli(
@@ -57,8 +58,7 @@ export async function runOwnerCli(
 	}
 
 	if (values.help === true) {
-		process.stdout
-			.write(`Usage: mise exec -- node scripts/verify-auth/owner-cli.ts --target FILE COMMAND [OPTIONS]
+		process.stdout.write(`Usage: ${ownerCliEntrypoint} --target FILE COMMAND [OPTIONS]
 Commands: login | add-agent --persona PROFILE --request-id UUID [--client-id ID | --output FILE] | remove-agent --client-id ID --request-id UUID | retire-agent --client-id ID --request-id UUID | agent-status --client-id ID
 Fleet commands: fleet-login | fleet-create-workspace --operation-id UUID --name NAME [--description TEXT] | fleet-workspace-lookup --workspace-id UUID | fleet-change-records [--after ID] [--limit N]
 Engine (organization owner, fleet credential): engine health | engine retired [--cursor ID] | engine retry ATTEMPT_ID [--operation-id UUID] | engine discard ATTEMPT_ID [--operation-id UUID]
@@ -75,10 +75,12 @@ Target and token cache are owned mode-0600 files outside Git checkouts. Credenti
 This switch makes no hardware-presence or per-command human-intent claim. Every management request checks the live Person/session.\n`);
 	} else {
 		try {
-			const target = await readAuthTarget(z.string().min(1).parse(values.target));
+			const targetPath = z.string().min(1).parse(values.target);
+			const target = await readAuthTarget(targetPath);
 			if (positionals[0] === approvalsCommandName)
 				return await runApprovalsCommand({
 					arguments: positionals.slice(1),
+					targetPath,
 					target,
 					options: values,
 					environment:

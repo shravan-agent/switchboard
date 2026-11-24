@@ -321,7 +321,13 @@ export async function verifyCentralPersonRequest(
 	const effectiveExpiry = effectiveExpiryMs(claims, settings.now());
 	if (effectiveExpiry === null) return { kind: 'refused', failure: 'expiry-bounds', facts };
 	if (settings.now() >= effectiveExpiry) return { kind: 'refused', failure: 'expired', facts };
-	const header = decodeProtectedHeader(proof);
+	// A malformed proof is a refusal, never a throw (verifier.rs:153-158, UnsupportedHeader: 401).
+	let header: ReturnType<typeof decodeProtectedHeader>;
+	try {
+		header = decodeProtectedHeader(proof);
+	} catch {
+		return { kind: 'refused', failure: 'proof-header', facts };
+	}
 	const jwk = z.looseObject({}).safeParse(header.jwk);
 	facts.proofJwkMembers = jwk.success ? Object.keys(jwk.data).toSorted() : [];
 	const exactHeader = z
@@ -352,11 +358,13 @@ export async function verifyCentralPersonRequest(
 		return { kind: 'refused', failure: 'proof-time', facts };
 	if (claims.cnf.jkt !== facts.proofKeyThumbprint)
 		return { kind: 'refused', failure: 'proof-key-binding', facts };
-	if (claims.organization_id !== target.organization)
-		return { kind: 'refused', failure: 'organization', facts };
+	// Central verifies the token and proof, then decodes the operation, then binds the intent and
+	// the organization, in that order (approval_person_admission.rs:379-386; verifier.rs:64-76).
 	const intent = typeof target.intent === 'string' ? target.intent : target.intent();
 	if (intent === null) return { kind: 'refused', failure: 'operation-body', facts };
 	if (proofClaims.intent !== intent) return { kind: 'refused', failure: 'intent', facts };
+	if (claims.organization_id !== target.organization)
+		return { kind: 'refused', failure: 'organization', facts };
 	return {
 		kind: 'verified',
 		claims,

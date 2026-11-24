@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
 	readCentralAcknowledgements,
@@ -357,4 +357,82 @@ it('S1 closure: a push Central received and a stored acknowledgement are not an 
 			push({ kind: 'answered', status: 200, body: JSON.stringify({ acknowledgedRevision: 2 }) }),
 		),
 	).not.toThrow();
+});
+
+describe('verify-registration challenge consumption', (): void => {
+	const registrationRoute: RouteClassification = {
+		...classification,
+		path: '/api/auth/passkey/verify-registration',
+		permittedRefusalEffects: ['consume-passkey-registration-challenge', 'factor-intent'],
+	};
+	const registrationChallenge = (
+		id: string,
+	): { id: string; identifier: string; value: string } => ({
+		id,
+		identifier: `signed-token-${id}`,
+		value: JSON.stringify({
+			type: 'registration',
+			expectedChallenge: `challenge-${id}`,
+			userData: { id: personId },
+		}),
+	});
+	const issued = registrationChallenge('019a3dce-2000-7000-8000-0000000000d1');
+	const unrelated = registrationChallenge('019a3dce-2000-7000-8000-0000000000d2');
+	const registrationFixture: EffectsFixture = { ...fixture, registrationChallengeId: issued.id };
+	const userVerificationRefusal = {
+		status: 403,
+		body: { code: 'USER_VERIFICATION_REQUIRED', message: 'user-verification-required' },
+	};
+	const boundaryRefusal = {
+		status: 400,
+		body: { error: 'invalid_request', reason: 'challenge', message: 'refused' },
+	};
+	function checkRegistration(props: {
+		readonly removed: readonly { id: string }[];
+		readonly answer: { readonly status: number; readonly body: unknown };
+		readonly route?: RouteClassification;
+	}): void {
+		const rows = [issued, unrelated];
+		assertRequestRefusalEffects({
+			classification: props.route ?? registrationRoute,
+			fixture: registrationFixture,
+			before: { ...before, verification: rows },
+			after: {
+				...before,
+				verification: rows.filter((row) => !props.removed.some((gone) => gone.id === row.id)),
+			},
+			answer: props.answer,
+		});
+	}
+
+	it('allows the native user-verification refusal to consume exactly the issued challenge', (): void => {
+		expect(() =>
+			checkRegistration({ removed: [issued], answer: userVerificationRefusal }),
+		).not.toThrow();
+	});
+
+	it('flags an unrelated challenge of the same person disappearing', (): void => {
+		expect(() =>
+			checkRegistration({ removed: [unrelated], answer: userVerificationRefusal }),
+		).toThrow('verification');
+		expect(() =>
+			checkRegistration({ removed: [issued, unrelated], answer: userVerificationRefusal }),
+		).toThrow('verification');
+	});
+
+	it('flags an early boundary refusal that consumes its live challenge', (): void => {
+		expect(() => checkRegistration({ removed: [issued], answer: boundaryRefusal })).toThrow(
+			'verification',
+		);
+	});
+
+	it('flags the consumption on a route without the permission', (): void => {
+		expect(() =>
+			checkRegistration({
+				removed: [issued],
+				answer: userVerificationRefusal,
+				route: { ...registrationRoute, permittedRefusalEffects: ['factor-intent'] },
+			}),
+		).toThrow('verification');
+	});
 });

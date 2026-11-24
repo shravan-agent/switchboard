@@ -2,6 +2,7 @@ import { handleAuthProofRequest } from '#sign-in-test-support/test-fixtures/auth
 import { handleAuthProofClockControl } from '#sign-in-test-support/test-fixtures/auth-proof-clock-control';
 import { createDeferredWorkTracker } from '#sign-in-test-support/test-fixtures/authorization-drain-proof';
 import { handleDatabaseProofControl } from '#sign-in-test-support/test-fixtures/recording-d1-database';
+import { handleWebCryptoDigestFailureControl } from '#sign-in-test-support/test-fixtures/web-crypto-digest-failure';
 
 export { AgentClientManagement } from '#sign-in-test-support/test-fixtures/management-observation-holds';
 
@@ -22,6 +23,7 @@ export default {
 		return (
 			(await handleAuthProofClockControl(request)) ??
 			(await handleDatabaseProofControl(request)) ??
+			(await handleWebCryptoDigestFailureControl(request)) ??
 			handleAuthProofRequest(request, bindings, {
 				waitUntil: (work: Promise<unknown>): void => context.waitUntil(deferredWork.track(work)),
 			})

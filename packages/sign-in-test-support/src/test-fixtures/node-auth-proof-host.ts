@@ -83,6 +83,7 @@ import {
 	createRecordingSignInCapabilities,
 	type RecordingSignInCapabilities,
 } from '#sign-in-test-support/test-fixtures/recording-sign-in-capabilities';
+import { handleWebCryptoDigestFailureControl } from '#sign-in-test-support/test-fixtures/web-crypto-digest-failure';
 
 export interface NodeAuthProofHost {
 	readonly address: URL;
@@ -460,6 +461,8 @@ export async function startNodeAuthProofHost(props: {
 		const pathname = new URL(request.url).pathname;
 		const releaseFailureControl = passkeyReleaseFailure.control(request);
 		if (releaseFailureControl !== null) return releaseFailureControl;
+		const webCryptoFailureControl = await handleWebCryptoDigestFailureControl(request);
+		if (webCryptoFailureControl !== null) return webCryptoFailureControl;
 		if (pathname === captchaObservationDrainPath) return Response.json({ kind: 'complete' });
 		const captchaProof = await handleConfiguredCaptchaProviderProof(request, () => configuration);
 		if (captchaProof !== null) return captchaProof;

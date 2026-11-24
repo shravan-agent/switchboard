@@ -148,7 +148,12 @@ export function createControlledCentralProvisioning(
 	const stamps = new Map<string, ControlledStoredStamp>();
 	let reply: ControlledProvisioningReply = 'unavailable';
 	const pushes: AuthorizationRevisionPush[] = [];
-	const floors = new Map<string, number>();
+	/**
+	 * Central's retained floors: per organization or person key, the applied push with the highest
+	 * revision. Applying, hasFloors, readFloors (approval admission) and forgetFloors all read
+	 * and write this one map, so forgetting a floor forgets what admission reads.
+	 */
+	const floors = new Map<string, AuthorizationRevisionPush>();
 	let pushReply: ControlledPushReply = 'acknowledge';
 	const pushWaiters: { readonly count: number; readonly resolve: () => void }[] = [];
 	let admin: ControlledCentralAdmin | null = null;
@@ -168,13 +173,10 @@ export function createControlledCentralProvisioning(
 			? `organization/${push.organizationId}`
 			: `person/${push.organizationId}/${push.personId}`;
 	}
-	/** Every push central applied (acknowledged or reply lost): what its floors are read from. */
-	const appliedPushes: AuthorizationRevisionPush[] = [];
 	function applyFloor(push: AuthorizationRevisionPush): number {
-		appliedPushes.push(push);
-		const retained = Math.max(floors.get(floorKey(push)) ?? 0, push.revision);
-		floors.set(floorKey(push), retained);
-		return retained;
+		const held = floors.get(floorKey(push));
+		if (held === undefined || push.revision >= held.revision) floors.set(floorKey(push), push);
+		return Math.max(held?.revision ?? 0, push.revision);
 	}
 	function recordPush(push: AuthorizationRevisionPush): void {
 		pushes.push(push);
@@ -230,27 +232,11 @@ export function createControlledCentralProvisioning(
 			else stamps.set(organizationId, stamp);
 		},
 		readFloors(organizationId: string, personId: string): CentralHeldFloors {
-			const retained = <Push extends AuthorizationRevisionPush>(
-				candidates: readonly Push[],
-			): Push | undefined =>
-				candidates.reduce<Push | undefined>(
-					(best, push) => (best === undefined || push.revision >= best.revision ? push : best),
-					undefined,
-				);
-			const organization = retained(
-				appliedPushes.flatMap((push) =>
-					push.kind === 'organization' && push.organizationId === organizationId ? [push] : [],
-				),
-			);
-			const person = retained(
-				appliedPushes.flatMap((push) =>
-					push.kind === 'person' &&
-					push.organizationId === organizationId &&
-					push.personId === personId
-						? [push]
-						: [],
-				),
-			);
+			const organizationFloor = floors.get(`organization/${organizationId}`);
+			const personFloor = floors.get(`person/${organizationId}/${personId}`);
+			const organization =
+				organizationFloor?.kind === 'organization' ? organizationFloor : undefined;
+			const person = personFloor?.kind === 'person' ? personFloor : undefined;
 			return {
 				organization:
 					organization === undefined
