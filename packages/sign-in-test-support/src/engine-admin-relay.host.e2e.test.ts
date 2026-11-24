@@ -1,10 +1,11 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { engineKindNames } from '@agent-collaboration/sign-in-core';
+import { engineKindNames, signFleetAdminProof } from '@agent-collaboration/sign-in-core';
 import {
 	createMemoryProofKeyStore,
 	runOwnerCli,
+	signInFleetCli,
 	type EngineCommandOptions,
 	type FleetCliIo,
 } from '@agent-collaboration/sign-in-owner-cli';
@@ -250,7 +251,9 @@ it('engine retry and discard with a fresh factor apply once; a repeat with the o
 		// The same operation ID for a different request is a conflict.
 		expect(await engine(['discard', retried], { 'operation-id': operationId })).toEqual({
 			exitCode: 2,
-			lines: ['This operation id was already used for a different request; nothing changed.'],
+			lines: [
+				'Central answered conflict: either the authorization it admitted this discard under changed while applying it, or this operation id is already held by another request or person. Nothing was written to the attempt or its subject.',
+			],
 		});
 		expect((await engine(['retry', ids.nextId()])).lines).toEqual([
 			expect.stringMatching(/^Not found: there is no retired attempt /u),
@@ -392,6 +395,87 @@ it('engine: a member, who holds neither organization:readAudit nor organization:
 			),
 		).toBe(false);
 		expect(harness.centralEngine.holdsAttempt(organizationId, attemptId)).toBe(true);
+	} finally {
+		await harness.close();
+	}
+});
+
+it('engine: the stand-in verifies like central (proof, then decode, then bind); a malformed DPoP header after a valid token is 401', async () => {
+	// Arrange: the owner's real fleet token, bound to this key.
+	const fixture = await setupFleetCli();
+	const { harness, target } = fixture;
+	try {
+		const session = await signInFleetCli({
+			target,
+			store: createMemoryProofKeyStore(webSignInCrypto),
+			io: fixture.io,
+		});
+		const relay = async (path: string, dpop: string, body: object): Promise<Response> =>
+			fetch(new URL(`/api/auth/organization-admin/v1/${path}`, target.issuer), {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
+					authorization: `DPoP ${session.accessToken}`,
+					dpop,
+				},
+				body: JSON.stringify(body),
+			});
+
+		// Act 1: a valid token with a DPoP header that is not a compact JWS
+		// (fleet-signin/src/person_proof/verifier.rs:153-158, UnsupportedHeader: 401).
+		const malformed = await relay('engine-health', 'not-a-compact-jws', {
+			organizationId: target.organizationId,
+		});
+		// Assert 1: refused 401, never thrown.
+		expect(malformed.status).toBe(401);
+		expect(harness.centralEngine.arrivals.at(-1)?.outcome).toEqual({
+			kind: 'refused-unauthenticated',
+			failure: 'proof-header',
+		});
+
+		// Act 2: a valid proof whose body names another organization and cannot be decoded (limit 0).
+		// Central checks the proof, then decodes the operation, then binds the intent and the
+		// organization (person_request/request_verifier.rs:72-94), so the decode refuses first.
+		const otherOrganization = ids.nextId();
+		const undecodable = { organizationId: otherOrganization, after: null, limit: 0 };
+		const proof = await signFleetAdminProof(webSignInCrypto, {
+			key: session.key,
+			htu: `${target.centralPublicOrigin}/organization-admin/v1/engine-retired`,
+			requestId: ids.nextId(),
+			issuedAtSeconds: Math.floor(initialTime / 1000),
+			bound: { accessToken: session.accessToken, intent: 'unbindable' },
+		});
+		const outOfOrder = await relay('engine-retired', proof, undecodable);
+		// Assert 2: 401 for the body, not for the organization the proof was never bound to.
+		expect(outOfOrder.status).toBe(401);
+		expect(harness.centralEngine.arrivals.at(-1)?.outcome).toEqual({
+			kind: 'refused-unauthenticated',
+			failure: 'operation-body',
+		});
+	} finally {
+		await harness.close();
+	}
+});
+
+it('engine: admission reads the provisioning peer’s one floor state, so forgotten floors refuse authorizationSyncRequired', async () => {
+	// Arrange
+	const fixture = await setupFleetCli();
+	const { harness } = fixture;
+	try {
+		const engine = engineCli({ fixture, io: fixture.io });
+		expect((await engine(['health'])).exitCode).toBe(0);
+		// Act: central forgets the floors it held.
+		harness.centralProvisioning.forgetFloors();
+		const afterForget = await engine(['health']);
+		// Assert: admission read the same forgotten state.
+		expect(afterForget).toEqual({
+			exitCode: 2,
+			lines: ['Central refused (authorizationSyncRequired); nothing changed.'],
+		});
+		expect(harness.centralEngine.arrivals.at(-1)?.outcome).toEqual({
+			kind: 'refused',
+			reason: 'authorizationSyncRequired',
+		});
 	} finally {
 		await harness.close();
 	}
