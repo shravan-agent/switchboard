@@ -173,6 +173,24 @@ describe('engine replies outside central’s contract are refused', (): void => 
 			reply: { ...healthSeconds, kinds: [...healthSeconds.kinds, healthSeconds.kinds[0]] },
 		},
 		{
+			case: 'a registered kind missing (six of seven)',
+			route: 'EngineHealth',
+			reply: { ...healthSeconds, kinds: healthSeconds.kinds.slice(1) },
+		},
+		{
+			case: 'no kinds at all',
+			route: 'EngineHealth',
+			reply: { ...healthSeconds, kinds: [] },
+		},
+		{
+			case: 'seven entries with one kind twice and another missing',
+			route: 'EngineHealth',
+			reply: {
+				...healthSeconds,
+				kinds: [...healthSeconds.kinds.slice(1), healthSeconds.kinds[1]],
+			},
+		},
+		{
 			case: 'an unknown engine kind',
 			route: 'EngineHealth',
 			reply: {

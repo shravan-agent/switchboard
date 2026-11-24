@@ -72,12 +72,19 @@ const engineKindHealthSchema = z.strictObject({
 });
 const engineHealthWireSchema = z.strictObject({
 	result: z.literal('engineHealth'),
-	// Every registered kind is listed once, zero counts too.
+	// Central builds health from the complete registry, zero counts included
+	// (attempt_administration.rs:281-324; engine_admin_dispatch.rs:14-35): all seven kinds, each
+	// exactly once. A partial or repeated list is not central's answer.
 	kinds: z
 		.array(engineKindHealthSchema)
-		.refine((kinds) => new Set(kinds.map(({ kind }) => kind)).size === kinds.length, {
-			message: 'Each engine kind is listed once',
-		}),
+		.refine(
+			(kinds) =>
+				kinds.length === engineKindNames.length &&
+				engineKindNames.every(
+					(name) => kinds.filter((health) => health.kind === name).length === 1,
+				),
+			{ message: 'Every registered engine kind is listed exactly once' },
+		),
 	alarm: engineAlarmTimeSchema.nullable(),
 	alarmMissing: z.boolean(),
 });
