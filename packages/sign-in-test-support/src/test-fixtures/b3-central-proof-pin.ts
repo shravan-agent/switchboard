@@ -48,11 +48,14 @@ export const c3CentralProofPin = {
 /**
  * DEL-07's live engine administration proof: Central main 4593797b1 (#394, the signed engine
  * administration route contracts), the locked production CLI debug build, signed for direct macOS
- * execution.
+ * execution. The signature records its signing time, so every signed rebuild has a new digest:
+ * this pins the one kept build. Its code without the signature (`codesign --remove-signature`) has
+ * SHA-256 e6372085437790dbb5d0e59d12bf83dfbf478c722656cb364c1a26e77b6ec3c2, which two rebuilds of
+ * this commit reproduced.
  */
 export const engineCentralProofPin = {
 	commit: '4593797b1c6a0dd03af6bbed6d8b00a0c4cc876f',
-	nativeSha256: 'b6a56bb7185a925d888d4e9ab88fb406e83852b5e5e9c33776d7bed9befde453',
+	nativeSha256: '9dc497f0b20788f7c265ca6af8cd0757f7714005c83a195860845f8bc72f311b',
 } as const satisfies CentralNativeProofPin;
 
 export async function assertB3CentralNativeProofArtifact(
